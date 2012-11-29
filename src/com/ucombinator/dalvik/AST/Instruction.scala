@@ -1,5 +1,7 @@
 package com.ucombinator.dalvik.AST
 
+// http://www.milk.com/kodebase/dalvik-docs-mirror/docs/dalvik-bytecode.html
+
 abstract class Instruction {
   var next: Instruction = null
 }

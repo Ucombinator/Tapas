@@ -8,5 +8,6 @@ abstract class ControlState {
   def framePointer: FramePointer
   // lookup by address in store
   def lookup(address: Any): Any
-  def peek: Any
+  def peek: Any /* peeks at the front of the statement linked-list?? or... */
+  def kont: Any /* gets continuation */
 }

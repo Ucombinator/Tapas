@@ -20,8 +20,9 @@ case object Unbounded extends AbstractCounterInt {
 // (control-state x stack-summary x proposition* x counter)
 abstract class State {
   val controlState: ControlState
-  val stackSummary: Any
-  val assumptions: Any
+  // PDCFA stack, not continuation
+  val stackSummary: Any /* TODO: replace */
+  val assumptions: Any /* TODO: replace */
   // TODO change the implementation of Map to something specific
   val counter: Map[Address, AbstractCounterInt] = Map()
 }

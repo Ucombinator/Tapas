@@ -1,5 +1,9 @@
 package com.ucombinator.dalvik.AST
 
-class FieldDef {
+class FieldDef(name: String, 
+    typ: JavaType, 
+    visibility: VisibilityAttr, 
+    isStatic: Boolean, 
+    isFinal: Boolean) {
 
 }
