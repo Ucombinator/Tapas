@@ -1,5 +1,6 @@
 package com.ucombinator.dalvik.AST
 
+// TODO(petey): rewrite this with a case object or something
 abstract case class VisibilityAttr
 class PublicVisibilityAttr extends VisibilityAttr
 class PrivateVisibilityAttr extends VisibilityAttr

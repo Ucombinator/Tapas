@@ -10,7 +10,8 @@ case object End extends Instruction
 
 class Nop extends Instruction
 
-abstract case class MoveInstruction
+// TODO(petey): needs parameters
+abstract case class MoveInstruction()
 
 // wide instructions get expanded to two adjacent instructions
 class Move_4_4 extends MoveInstruction
