@@ -1,0 +1,26 @@
+// specify the location of the APK file to analyze
+--apk=MyProgram.apk
+
+// specify k for the analysis
+-k 3
+// enable PDCFA
+--pdcfa
+// enable abstract garbage collection
+--gc
+// enable widening (maybe specify when or how)
+--widening
+// prove during interpretation instead of after
+--real-time-proof
+// specify a Scala or Java class to do the theorem proving
+--theorem_prover_class=MyTheoremProver.class
+// specify a stock theorem prover from a list of provided provers
+--theorem_prover=flow 
+
+// save AST to a file
+--ast_output=destination.ast
+// save behavior graph to a file
+--behavior_graph_output=destination.bg
+// stop after parsing
+--no_interpretation
+// stop after interpretation
+--no_theorem_proving
