@@ -1,0 +1,10 @@
+Input: Dalvik Byte Code
+Parser
+	Produces an AST. Returns a root Program node which contains all classes.
+Abstract Interpreter
+	Iterates an abstract interpretation of init()s and onCreate()s until reaching a fixed-point.
+	Iterates on abstract interpretation of events until reaching a second fixed-point.
+	Returns an abstract state-space graph / abstract behavior graph.
+Theorem Prover
+	Uses a provided theorem class to determine a property of the behavior graph. 
+
