@@ -23,7 +23,7 @@ abstract class State {
   def statement: Instruction
   def framePointer: FramePointer
   // S: lookup by address in store
-  def lookup(address: Any): Any
+  def lookup(address: Address): Any
   def peek: Any /* gets the top of the PDCFA stack */
   // K: get continuation
   def kont: Any
