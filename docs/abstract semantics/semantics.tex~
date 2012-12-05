@@ -1,0 +1,34 @@
+% Abstract Semantics for our DBC analyzer
+%
+
+\documentclass{article}
+
+\usepackage{amssymb,amsmath}
+
+\begin{document}
+
+Langauge Grammar:
+\begin{align*}
+	Instruction ::=& \\
+\end{align*}
+
+
+
+
+
+
+Abstract domains:
+\begin{align*}
+	\varsigma \in \Sigma =&\ Instruction \times \widehat{FP} \times \widehat{Store} \times \widehat{Kont} \times \widehat{Time} \\
+	& \vert\ , Instruction\\
+	fp \in FramePointer =&\ \ \ \mathbf{(todo)}\\
+	kont \in Kont =&\ fnk(Instruction, fp, a)\ \ \mathbf{(todo)}\\
+	a \in Address =&\ \ \ \mathbf{(todo)} \\
+	r \in Register =&\ \mathbb{N} \\
+	t \in Time =&\ \\
+\end{align*}
+
+
+
+\end{document}
+
