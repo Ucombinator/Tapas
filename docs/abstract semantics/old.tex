@@ -1,0 +1,443 @@
+\documentclass{article}
+\usepackage{times}
+\usepackage{fullpage}
+\usepackage[all,cmtip]{xy}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{alltt}
+% \usepackage{mathpartir}
+\usepackage{stmaryrd}
+\usepackage{mathtools}
+\usepackage{comment}
+\usepackage[
+  pdfauthor={David Van Horn},
+  pdfsubject={Computer Science}]
+  {hyperref}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\newtheorem{definition}{Definition}
+
+\newcommand\code[1]{\text{\tt{#1}}}
+\newcommand\java[1]{\tt{#1}}
+\newcommand\pow{\mathcal{P}}
+
+\newcommand\Attrs{\mathit{Attrs}}
+\newcommand\Stmts{\mathit{Stmt}^\star}
+\newcommand\FP{\mathit{FP}}
+\newcommand\Store{\mathit{Store}}
+\newcommand\Kont{\mathit{Kont}}
+\newcommand\Time{\mathit{Time}}
+\newcommand\CT{\mathit{CT}}
+\newcommand\Addr{\mathit{Addr}}
+\newcommand\reg[2]{(#1,#2)}
+\newcommand\fp{\mathit{fp}}
+\newcommand\afp{\hat\fp}
+\newcommand\CP{\mathit{ClassPath}}
+\newcommand\fnk{\mathbf{fnk}}
+\newcommand\kont{\kappa}
+\newcommand\akont{\hat\kappa}
+\newcommand\stmts{\vec{\mathit{stmt}}}
+\newcommand\s[1]{\mathit{#1}}
+\newcommand\sa[1]{\widehat{\s{#1}}}
+\newcommand\store{\sigma}
+\newcommand\astore{\hat\store}
+\newcommand\finmap{\rightharpoonup_{\text{fin}}}
+\newcommand\mtk{\mathbf{halt}}
+\newcommand\addr{a}
+\newcommand\aaddr{\hat{a}}
+\newcommand\raddr{a_r}
+\newcommand\haddr{a_h}
+\newcommand\ahaddr{\hat{a}_h}
+\newcommand\araddr{\hat{a}_r}
+\newcommand\akaddr{\hat{a}_\kont}
+\newcommand\regid{r}
+\newcommand\ret{\code{ret}}
+\newcommand\exn{\code{exn}}
+\newcommand\getStmts{\mathcal{S}}
+\newcommand\methodStmts{\mathcal{M}}
+\newcommand\virtualStmts{\mathcal{V}}
+\newcommand\handlers{\mathcal{H}}
+\newcommand\lab{\ell}
+\newcommand\alloc{\mathit{alloc}}
+\newcommand\aalloc{\widehat{\mathit{alloc}}}
+\newcommand\aallock{\widehat{\mathit{allock}}}
+\newcommand\aSigma{\hat\Sigma}
+\newcommand\atime{\hat{t}}
+\newcommand\atick{\widehat{\mathit{tick}}}
+\newcommand\tm{t}
+\newcommand\type{\tau}
+\newcommand\field{\mathit{field}}
+\newcommand\new{\mathit{new}}
+\newcommand\state{\varsigma}
+\newcommand\obj{o}
+\newcommand\val{v}
+
+\title{Concrete and Abstract Semantics for Dalvik}
+
+\author{Matthew Might \and David {Van Horn}}
+
+\begin{document}
+\maketitle
+
+\section{Concrete semantics}
+
+States:
+\begin{gather*}
+\Sigma = \Stmts \times \FP \times \Store \times \Kont % \times \Time
+\text{, where}
+\\
+\begin{align*}
+\fp \in \FP &\text{ an infinite set}
+\\
+\store \in \Store &= \Addr \finmap \s{Value}
+\\
+\kont \in \Kont &::= \fnk(\stmts, \fp, \kont)\ |\ \mtk
+\\
+\addr \in \Addr &= \s{RegAddr}\ \dot\cup\ \s{HeapAddr}
+\\
+\raddr \in \s{RegAddr} &::= \reg\regid\fp
+\\
+\haddr \in \s{HeapAddr} &\text{ an infinite set}
+\\
+\regid \in \s{Register} & = \s{Natural} \cup \{ \code{ret} \}
+\end{align*}
+\end{gather*}
+
+Values:
+\begin{align*}
+\val \in \s{Value} &= \s{Object} \cup \dots
+\end{align*}
+
+Classes:
+\begin{gather*}
+\begin{align*}
+\mathit{Class} &= \Attrs \times 
+\s{Fields} \times
+\s{Methods} \times
+\overbrace{\CP}^{\text{Super}} \times
+\overbrace{\pow(\CP)}^{\text{Interfaces}} 
+\text{, where}
+\end{align*}
+\\
+\begin{align*}
+\Attrs &= \pow\{\java{public}, \java{private}, \java{final}, \dots\}\\
+\s{Fields} &= \s{Id} \rightarrow \s{Field}\\
+\s{Methods} &= \s{Id} \rightarrow \s{Method}\\
+\end{align*}
+\end{gather*}
+
+
+Metafunctions:
+\begin{align*}
+\CT &: \CP \rightarrow \s{Class}
+\\
+\getStmts &: \s{Label} \rightarrow \Stmts
+\\
+\methodStmts &: \s{Id} \rightarrow \Stmts
+\\
+\virtualStmts &: \s{Id} \times \s{Object} \rightarrow \Stmts
+\\
+\handlers &: \s{Label} \times \FP \times \Kont
+ \rightarrow (\s{Label} \times \FP \times \Kont)
+\\
+\delta &: \s{Operation} \times \s{Value}^\star \rightarrow \s{Values}
+\\
+\alloc &: \Sigma \rightarrow \FP
+\\
+\new &: \Sigma \rightarrow \s{Object}
+\end{align*}
+
+
+\begin{figure}
+\begin{align*}
+\langle \code{nop}::\stmts, \fp, \store, \kont \rangle
+&\longmapsto
+\langle \stmts, \fp, \store, \kont \rangle
+\\
+\langle \code{move-object}(\regid_d,\regid_s)::\stmts, \fp, \store, \kont \rangle
+&\longmapsto
+\langle \stmts, \fp, \store[\reg{\regid_d}\fp \mapsto \store\reg{\regid_s}\fp], \kont \rangle
+%% \\
+%% \langle \code{move-result-object}(\regid) :: \stmts, \fp, \store, \kont \rangle
+%% &\longmapsto
+%% \langle \stmts, \fp, \store[\reg\regid\fp\mapsto\store\reg\ret\fp]
+\\
+\langle \code{return-void}::\stmts', \fp', \store, \fnk(\stmts,\fp,\kont) \rangle
+&\longmapsto
+\langle \stmts, \fp, \store, \kont \rangle
+\\
+\langle \code{return-object}(\regid) :: \stmts', \fp', \store, \fnk(\stmts,\fp,\kont)
+\rangle
+&\longmapsto
+\langle \stmts,\fp,\store[\reg\ret\fp\mapsto \store(n,\fp')],\kont\rangle
+\\
+\langle \code{const}(\regid,c)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle\stmts,\fp,\store[\reg\regid\fp\mapsto c],\kont\rangle
+\\
+\langle \code{throw}^\lab(\regid)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle \getStmts(\lab'),\fp',\store[\reg\exn{\fp'}\mapsto \store(\regid,\fp)],\kont'\rangle
+\\
+&\mbox{where }(\lab',\fp',\kont') = \handlers(\lab,\fp,\kont)
+\\
+\langle \code{goto}(\lab)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle \getStmts(\lab), \fp,\store,\kont\rangle
+\\
+\langle \code{new-instance}(\regid,\type)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle \stmts,\fp,\store[\reg\regid\fp \mapsto o],\kont\rangle
+\\
+&\mbox{where } o = \new(\state)
+\\
+\langle \code{if-eq}(\regid,\regid',\lab)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle \getStmts(\lab), \fp,\store,\kont\rangle
+\text{ if }\store\reg\regid\fp = \store\reg{\regid'}\fp
+\\
+\langle \code{if-eq}(\regid,\regid',\lab)::\stmts,\fp,\store,\kont\rangle
+& \longmapsto
+\langle \stmts, \fp,\store,\kont\rangle
+\text{ if }\store\reg\regid\fp \neq \store\reg{\regid'}\fp
+\\
+\langle \code{iget}(\regid_d,\regid_s,\field)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle \stmts,\fp,\store[\reg{\regid_d}\fp \mapsto \store(\addr) ],\kont\rangle
+\\
+&\mbox{where }\store\reg{\regid_s}\fp = \obj
+\mbox{ and }o.\field = \addr
+\\
+\langle \code{iput}(\regid_v,\regid_s,\field)::\stmts,\fp,\store,\kont\rangle
+&\longmapsto
+\langle \stmts,\fp,\store[\addr \mapsto \store\reg{\regid_v}\fp],\kont\rangle 
+\\
+&\mbox{where }\store\reg{\regid_s}\fp = \obj
+\mbox{ and }\obj.\field = \addr
+\\
+\langle \code{invoke-direct}(\regid_0,\dots,\regid_n,\mathit{id})::\stmts,\fp,\store,\kont\rangle
+& \longmapsto
+\langle \methodStmts(\mathit{id}), \fp', 
+\store', \fnk(\stmts,\fp,\kont)\rangle
+\\
+&
+\begin{aligned}
+\mbox{where } \store' &=
+\store[\reg{\code{0}}{\fp'}
+  \mapsto \store\reg{\regid_0}\fp,\dots,\reg{n}{\fp'} \mapsto  \store{\reg{\regid_n}\fp}]
+\\
+\fp' &= \alloc(\state)
+\end{aligned}
+\\
+\langle \code{invoke-virtual}(\regid_0,\dots,\regid_n,\mathit{id})::\stmts,\fp,\store,\kont\rangle
+& \longmapsto
+\langle \virtualStmts(\mathit{id},\store\reg{\regid_0}\fp), \fp', 
+\store', \fnk(\stmts,\fp,\kont)\rangle
+\\
+&
+\begin{aligned}
+\mbox{where } \store' &=
+\store[\reg{\code{0}}{\fp'}
+  \mapsto \store\reg{\regid_0}\fp,\dots,\reg{n}{\fp'} \mapsto  \store{\reg{\regid_n}\fp}]
+\\
+\fp' & = \alloc(\state)
+\end{aligned}
+\\
+\langle \code{\emph{unop}}(\regid_d,\regid_s)::\stmts,\fp,\store,\kont \rangle
+& \longmapsto
+\langle \stmts,\fp,\store[\reg{\regid_d}\fp \mapsto \val], \kont\rangle
+\\
+&\text{where }\val = \delta(\code{\emph{unop}},\store\reg{\regid_s}\fp)
+\\
+\langle \code{\emph{binop}}(\regid_d,\regid_1,\regid_2)::\stmts,\fp,\store,\kont \rangle
+& \longmapsto
+\langle \stmts,\fp,\store[\reg{\regid_d}\fp \mapsto \val], \kont\rangle
+\\
+&\text{where }\val = \delta(\code{\emph{binop}},\store\reg{\regid_1}\fp, \store\reg{\regid_2}\fp)
+\end{align*}
+\caption{Dalvik semantics}
+\end{figure}
+
+To do next: arrays, \dots, define $\handlers$, $\widehat\handlers$.
+
+\subsection{Sugar}
+
+\begin{align*}
+\code{move-result-object}(\regid) &\equiv
+\code{move-object}(\regid,\ret)
+\\
+\code{move-exception}(\regid) &\equiv
+\code{move-object}(\regid,\exn)
+\end{align*}
+
+\section{Abstract semantics}
+
+States:
+\begin{gather*}
+\aSigma = \Stmts \times \widehat\FP \times \widehat\Store \times \widehat\Kont \times \widehat\Time
+\text{, where}
+\\
+\begin{align*}
+\afp \in \widehat\FP &\text{ a finite set}
+\\
+\hat\store \in \widehat\Store &= \Addr \finmap \s{Value}
+\\
+\akont \in \widehat\Kont &::= \fnk(\stmts, \hat\fp, \akaddr)\ |\ \mtk
+\\
+\aaddr \in \widehat{Addr} &= \s{RegAddr}\ \dot\cup\ \s{HeapAddr}\ \dot\cup\ \s{KontAddr}
+\\
+\araddr \in \sa{RegAddr} &::= \reg\regid{\hat\fp}
+\\
+\ahaddr \in \sa{HeapAddr} &\text{ a finite set}
+\\
+\akaddr \in \sa{KontAddr} &\text{ a finite set}
+\\
+\regid \in \s{Register} & = \s{Natural} \cup \{ \code{ret} \}
+\\
+\atime \in \widehat\Time &\text{ a finite set}
+\end{align*}
+\end{gather*}
+
+\begin{figure}
+\begin{align*}
+\langle \code{nop}::\stmts, \afp, \astore, \akont, \atime \rangle
+&\longmapsto
+\langle \stmts, \afp, \astore, \akont, \atime \rangle
+\\
+\langle \code{move-object}(\regid_d,\regid_s)::\stmts, \afp, \astore, \akont, \atime \rangle
+&\longmapsto
+\langle \stmts, \afp, \astore\sqcup[\reg{\regid_d}\afp \mapsto \astore\reg{\regid_s}\afp], \akont, \atime \rangle
+\\
+%% \langle \code{move-result-object}(\regid) :: \stmts, \afp, \astore, \akont,\atime \rangle
+%% &\longmapsto
+%% \langle \stmts, \afp, \astore\sqcup[\reg\regid\afp\mapsto\astore\reg\ret\afp],\akont,\atime\rangle
+%% \\
+\langle \code{return-void}::\stmts', \afp', \astore, \fnk(\stmts,\afp,\akaddr) \rangle
+&\longmapsto
+\langle \stmts, \afp, \astore, \akont \rangle \text{ if } \akont \in \astore(\akaddr)
+\\
+\langle \code{return-object}(\regid) :: \stmts', \afp', \astore, \fnk(\stmts,\afp,\akaddr)
+\rangle
+&\longmapsto
+\langle \stmts,\afp,\astore\sqcup[\reg\ret\afp\mapsto \astore(n,\afp')],\akont\rangle \text{ if }\akont \in \astore(\akaddr)
+\\
+\langle \code{const}(\regid,c)::\stmts,\afp,\astore,\akont,\atime\rangle
+&\longmapsto
+\langle\stmts,\afp,\astore\sqcup[\reg\regid\afp\mapsto c],\akont,\atime\rangle
+\\
+\langle \code{throw}^\lab(\regid)::\stmts,\afp,\astore,\akont\rangle
+&\longmapsto
+\langle \getStmts(\lab'),\fp',\astore\sqcup[\reg\exn{\afp'}\mapsto \astore(\regid,\afp)],\akont'\rangle
+\\
+&\mbox{where }(\lab',\afp',\akont') \in \widehat\handlers_{\astore}(\lab,\afp,\akont)
+\\
+\langle \code{goto}(\lab)::\stmts',\afp,\astore,\akont,\atime\rangle
+&\longmapsto
+\langle \getStmts(\lab), \afp,\astore,\akont,\atime\rangle
+\\
+\langle \code{new-instance}(\regid,\type)::\stmts,\afp,\astore,\akont,\atime\rangle
+&\longmapsto
+\langle \stmts,\afp,\astore\sqcup[\reg\regid\afp \mapsto o],\akont,\atime\rangle
+\\
+&\mbox{where } o = \widehat\new(\state)
+\\
+\langle \code{if-eq}(\regid,\regid',\lab)::\stmts,\afp,\astore,\akont,\atime\rangle
+&\longmapsto
+\langle \getStmts(\lab), \afp,\astore,\akont,\atime\rangle
+\\
+&
+\text{ if }\exists v_1 \in \astore\reg\regid\afp,\exists v_2 \in \astore\reg{\regid'}\afp . v_1 = v_2
+\\
+\langle \code{if-eq}(\regid,\regid',\lab)::\stmts,\afp,\astore,\akont,\atime\rangle
+& \longmapsto
+\langle \stmts, \afp,\astore,\akont,\atime\rangle
+\\
+&
+\text{ if }\exists v_1 \in \astore\reg\regid\afp,\exists v_2 \in \astore\reg{\regid'}\afp . v_1 \neq v_2
+\\
+\langle \code{iget}(\regid_d,\regid_s,\field)::\stmts,\afp,\astore,\akont,\atime\rangle
+&\longmapsto
+\langle \stmts,\afp,\astore\sqcup[\reg{\regid_d}\afp \mapsto \astore(\addr) ],\akont,\atime\rangle
+\\
+&\mbox{where }\astore\reg{\regid_s}\fp \ni \obj
+\mbox{ and }o.\field = \addr
+\\
+\langle \code{iput}(\regid_v,\regid_s,\field)::\stmts,\afp,\astore,\akont,\atime\rangle
+&\longmapsto
+\langle \stmts,\afp,\astore\sqcup[\addr \mapsto \astore\reg{\regid_v}\afp],\akont,\atime\rangle 
+\\
+&\mbox{where }\astore\reg{\regid_s}\afp \ni \obj
+\mbox{ and }\obj.\field = \addr
+\\
+\langle \code{invoke-direct}(\regid_0,\dots,\regid_n,\mathit{id})::\stmts,\afp,\astore,\akont,\atime\rangle
+& \longmapsto
+\langle \methodStmts(\mathit{id}), \afp', 
+\astore'', \fnk(\stmts,\afp,\akaddr),\atime'\rangle
+\\
+&
+\begin{aligned}
+\mbox{ where } \astore'' &=
+\astore'\sqcup[\reg{\code{0}}{\afp'}
+  \mapsto \store\reg{\regid_0}\afp,\dots,\reg{n}{\afp'} \mapsto  \store{\reg{\regid_n}\afp}]
+\\
+\astore' &= \astore \sqcup [\akaddr\mapsto \akont]  
+\\
+\afp' &= \aalloc(\hat\state)
+\\
+\akaddr &= \aallock(\hat\state)
+\\
+\atime' &= \atick(\atime)
+\end{aligned}
+\\
+\langle \code{invoke-virtual}(\regid_0,\dots,\regid_n,\mathit{id})::\stmts,\afp,\astore,\akont,\atime\rangle
+& \longmapsto
+\langle \virtualStmts(\mathit{id},v), \afp', 
+\astore'', \fnk(\stmts,\afp,\akont),\atime'\rangle \text{ if }v \in\astore\reg{\regid_0}\afp
+\\
+&
+\begin{aligned}
+\mbox{where } \astore'' &=
+\astore'\sqcup[\reg{\code{0}}{\fp'}
+  \mapsto \astore\reg{\regid_0}\afp,\dots,\reg{n}{\afp'} \mapsto  \store{\reg{\regid_n}\afp}]
+\\
+\astore' &= \astore\sqcup[\akaddr\mapsto \akont]
+\\
+\afp' &= \aalloc(\hat\state)
+\\
+\akaddr &= \aallock(\hat\state)
+\\
+\atime' &= \atick(\atime)
+\end{aligned}
+\\
+\langle \code{\emph{unop}}(\regid_d,\regid_s)::\stmts,\afp,\astore,\akont \rangle
+& \longmapsto
+\langle \stmts,\afp,\astore\sqcup[\reg{\regid_d}\afp \mapsto v], \akont\rangle
+\\
+&\text{ where }v \in \hat\delta(\code{\emph{unop}},\store\reg{\regid_s}\fp)
+\\
+\langle \code{\emph{binop}}(\regid_d,\regid_1,\regid_2)::\stmts,\fp,\store,\kont \rangle
+& \longmapsto
+\langle \stmts,\afp,\astore\sqcup[\reg{\regid_d}\afp \mapsto v], \akont\rangle
+\\
+&\text{ where }v \in \hat\delta(\code{\emph{binop}},\astore\reg{\regid_1}\afp, \astore\reg{\regid_2}\afp)
+\end{align*}
+\caption{Dalvik abstract semantics}
+\end{figure}
+
+Metafunctions:
+\begin{align*}
+\hat\delta &: \s{Operation} \times \pow(\s{Value})^\star \rightarrow \pow(\s{Value})
+\\
+\aalloc &: \hat\Sigma \rightarrow \widehat\FP
+\\
+\aallock &: \hat\Sigma \rightarrow \s{KontAddr}
+\\
+\widehat\new &: \hat\Sigma \rightarrow \s{Object}
+\end{align*}
+
+\bibliographystyle{plain}
+\bibliography{bibliography}
+\end{document}
