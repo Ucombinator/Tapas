@@ -1,54 +1,106 @@
-//package com.ucombinator.dalvik.DexReader
+package com.ucombinator.dalvik.AST
 
-import math.min
-import collection.immutable.TreeMap
-import collection.mutable.{ArrayBuffer, ArrayBuilder}
-import java.io.{InputStream,DataInputStream,DataOutputStream,ByteArrayOutputStream,ByteArrayInputStream,EOFException, StreamCorruptedException}
-import java.nio.{ByteBuffer,ByteOrder}
-import java.nio.channels.ReadableByteChannel
+import collection.SortedMap
+import collection.mutable.ArrayBuilder
+import java.io.{FileInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream, ByteArrayInputStream, StreamCorruptedException}
+import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.channels.FileChannel
+import java.nio.channels.FileChannel.MapMode._
 
-class DexReader(ch:ReadableByteChannel) {
-  private val BUFFER_SIZE = 4096
-  private val buffer = ByteBuffer.allocate(BUFFER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
-  private var currBuffer = buffer
-  private var readingFromMainBuffer = true
-  private var channelOffset = ch.read(buffer)
-  private var bufferEmptyTail = buffer.remaining
-  private var unknownDataBuffer = TreeMap.empty[Int,ByteBuffer]
-  private var reachedEndOfFile = false
+class DexReader(ch:FileChannel) {
+  private val reader = new LowLevelReaderHelper(ch)
 
-  /* initialization code */
-  if (channelOffset == -1) throw new EOFException("Initialized with empty file")
-  buffer.rewind
+  def this(is:FileInputStream) = this(is.getChannel)
+  def this(fn:String) = this(new FileInputStream(fn))
 
-  private def checkBuffer(size:Int) {
-    val remaining = currBuffer.remaining
-    if (remaining < size) {
-      if (readingFromMainBuffer) {
-        if (reachedEndOfFile) throw new EOFException("Expected " + size + " bytes but only " + remaining + " remain in the buffer and the end of file has been reached. At position " + position)
-        val remainingBytes = new Array[Byte](remaining)
-        /* copy our remining bytes to the start of our buffer---this is always a relatively small number */
-        buffer.get(remainingBytes)
-        buffer.clear
-        for (b <- remainingBytes) buffer.put(b)
-        val bytesRead = ch.read(buffer)
-        bufferEmptyTail = buffer.remaining
-        if (bytesRead == 0 || bytesRead == -1) reachedEndOfFile = true
-        if (bytesRead > 0) channelOffset += bytesRead
-        buffer.rewind
-      } else {
-        throw new EOFException("reached end of temporary buffer")
-      }
+  private class LowLevelReaderHelper(ch:FileChannel) {
+    private val buffer = ch.map(READ_ONLY, 0, ch.size).order(ByteOrder.LITTLE_ENDIAN)
+
+    private val biUshort = BigInt(0xffff)
+    private val biUlong = (biUshort | biUshort << 16 | biUshort << 32 | biUshort << 48)
+
+
+    private def byteToUByte(b:Byte):Short = { val s = b.toShort; if (b < 0) { (s & 0xff).toShort } else s }
+    private def shortToUShort(s:Short):Int = { val i = s.toInt; if (s < 0) i & 0xffff else i }
+    private def intToUInt(i:Int):Long = { val l = i.toLong; if (i < 0) (l << 32) >>> 32 else l }
+    private def longToULong(l:Long):BigInt = { val b = BigInt(l); if (l < 0) b & biUlong else b }
+
+    def order(bo:ByteOrder) = buffer.order(bo)
+    def get(bytes:Array[Byte]) = buffer.get(bytes)
+    def position():Int = buffer.position
+    def position(x:Int) = buffer.position(x)
+    def position(x:Long) = buffer.position(x.safeToInt)
+    def checkPosition(x:Long) =
+      if (buffer.position != x)
+         throw new StreamCorruptedException("Expected to start read at position " +
+           x + " but, stream is at position " + position)
+    def readByte():Byte = buffer.get
+    def readUByte():Short = byteToUByte(readByte())
+    def readShort():Short = buffer.getShort
+    def readUShort():Int = shortToUShort(readShort())
+    def readInt():Int = buffer.getInt
+    def readUInt():Long = intToUInt(readInt())
+    def readLong():Long = buffer.getLong
+    def readULong():BigInt = longToULong(readLong())
+
+    def readUleb128():Long = {
+      var num = 0
+      var shift = 0
+      var ubyte = 0
+      do {
+        ubyte = readUByte
+        num |= (ubyte & 0x7f) << shift
+        shift += 7
+      } while((ubyte & 0x80) != 0)
+      num
+    }
+  
+    def readUleb128p1():Long = readUleb128 - 1
+  
+    def readSleb128():Long = {
+      var num = 0
+      var shift = 0
+      var ubyte = 0
+      do {
+        ubyte = readUByte
+        num |= (ubyte & 0x7f) << shift
+        shift += 7
+      } while((ubyte & 0x80) != 0)
+      if ((ubyte & 0x40) == 0) num else num - (1 << shift)
+    }
+  
+    /* translate between the android Modified-UTF-8 string, which starts with a
+     * uleb128 size indicator and is followed by a null character, into a java
+     * style Modified-UTF-8 string, which starts with a short to indicate the
+     * length and has no null terminator. */
+    def readUTF():String = {
+      val size = readUleb128.safeToInt       // read the size
+      val strBytes = new Array[Byte](size)   // allocate array to put string in
+      buffer.get(strBytes)                   // and read it
+      val nullByte = buffer.get              // make sure we got a null byte
+      if (nullByte != 0)
+        throw new OutOfRange("Expected null byte, but found " + nullByte)
+      val ob = new ByteArrayOutputStream     // allocate output stream
+      val dos = new DataOutputStream(ob)     // allocate a data outputstream
+      dos.writeChar(size.toChar)             // write the start bytes
+      ob.write(strBytes,0,size)              // write string bytes
+      // finally create an input stream, and read the string
+      new DataInputStream(new ByteArrayInputStream(ob.toByteArray)).readUTF
     }
   }
 
-  private def findTmpBuffer(location:Int):(Int,ByteBuffer) = {
-    val (baseAddr,buffer) = unknownDataBuffer.takeWhile((t:(Int,ByteBuffer)) => t._1 <= location).last
-    buffer.position(location - baseAddr)
-    (baseAddr,buffer)
+  private class LongConverter(self:Long) {
+    def safeToInt():Int =
+      if (self.isValidInt)
+         self.toInt
+       else
+         throw new ConversionOutOfRange(self + ":Long cannot be converted to an Int")
   }
 
-  private def position() = channelOffset - (currBuffer.remaining - bufferEmptyTail)
+  implicit private def longToLongConverter(l:Long):LongConverter = new LongConverter(l)
+
+  case class ConversionOutOfRange(msg:String) extends Exception(msg)
+  case class OutOfRange(msg:String) extends Exception(msg)
 
   /* constants */
 
@@ -59,29 +111,8 @@ class DexReader(ch:ReadableByteChannel) {
   private val ENDIAN_CONSTANT = 0x12345678
   private val REVERSE_ENDIAN_CONSTANT = 0x78563412
 
-  /* Can't remember */
+  /* Used to indicate when an index into the types or strings array is not valid */
   private val NO_INDEX = 0xffffffff
-
-  /* Accessibility types */
-  private val ACC_PUBLIC = 0x1
-  private val ACC_PRIVATE = 0x2
-  private val ACC_PROTECTED = 0x4
-  private val ACC_STATIC = 0x8
-  private val ACC_FINAL = 0x10
-  private val ACC_SYNCHRONIZED = 0x20
-  private val ACC_VOLATILE = 0x40
-  private val ACC_BRIDGE = 0x40
-  private val ACC_TRANSIENT = 0x80
-  private val ACC_VARARGS = 0x80
-  private val ACC_NATIVE = 0x100
-  private val ACC_INTERFACE = 0x200
-  private val ACC_ABSTRACT = 0x400
-  private val ACC_STRICT = 0x800
-  private val ACC_SYNTHETIC = 0x1000
-  private val ACC_ANNOTATION = 0x2000
-  private val ACC_ENUM = 0x4000
-  private val ACC_CONSTRUCTOR = 0x10000
-  private val ACC_DECLARED_SYNCHRONIZED = 0x20000
 
   /* value type indicators */
   private val VALUE_BYTE = 0x00
@@ -101,26 +132,6 @@ class DexReader(ch:ReadableByteChannel) {
   private val VALUE_NULL = 0x1e
   private val VALUE_BOOLEAN = 0x1f
 
-  /* item type indicators */
-  private val TYPE_HEADER_ITEM = 0x0000
-  private val TYPE_STRING_ID_ITEM = 0x0001
-  private val TYPE_TYPE_ID_ITEM = 0x0002
-  private val TYPE_PROTO_ID_ITEM = 0x0003
-  private val TYPE_FIELD_ID_ITEM = 0x0004
-  private val TYPE_METHOD_ID_ITEM = 0x0005
-  private val TYPE_CLASS_DEF_ITEM = 0x0006
-  private val TYPE_MAP_LIST = 0x1000
-  private val TYPE_TYPE_LIST = 0x1001
-  private val TYPE_ANNOTATION_SET_REF_LIST = 0x1002
-  private val TYPE_ANNOTATION_SET_ITEM = 0x1003
-  private val TYPE_CLASS_DATA_ITEM = 0x2000
-  private val TYPE_CODE_ITEM = 0x2001
-  private val TYPE_STRING_DATA_ITEM = 0x2002
-  private val TYPE_DEBUG_INFO_ITEM = 0x2003
-  private val TYPE_ANNOTATION_ITEM = 0x2004
-  private val TYPE_ENCODED_ARRAY_ITEM = 0x2005
-  private val TYPE_ANNOTATIONS_DIRECTORY_ITEM = 0x2006
-
   /* debugging state machine insturctions (not including extended instructions) */
   private val DBG_END_SEQUENCE = 0x00
   private val DBG_ADVANCE_PC = 0x01
@@ -132,412 +143,1089 @@ class DexReader(ch:ReadableByteChannel) {
   private val DBG_SET_PROLOGUE_END = 0x07
   private val DBG_SET_EPILOGUE_BEGIN = 0x08
   private val DBG_SET_FILE = 0x09
+  private val DBG_FIRST_SPECIAL = 0x0a  // the smallest special opcode
+  private val DBG_LINE_BASE = -4        // the smallest line number increment
+  private val DBG_LINE_RANGE = 15       // the number of line increments represented
 
-  /* visibility indicators */
-  private val VISIBILITY_BUILD = 0x00
-  private val VISIBILITY_RUNTIME = 0x01
-  private val VISIBILITY_SYSTEM = 0x02
-
-  private val biUshort = BigInt(0xffff)
-  private val biUlong = (biUshort | biUshort << 16 | biUshort << 32 | biUshort << 48)
-
-  /* basic readers and conversitions to support (otherwise unsupported) unsigned integer types */
-  private def byteToUByte(b:Byte):Short = { val s = b.toShort; if (b < 0) { (s & 0xff).toShort } else s }
-  private def shortToUShort(s:Short):Int = { val i = s.toInt; if (s < 0) i & 0xffff else i }
-  private def intToUInt(i:Int):Long = { val l = i.toLong; if (i < 0) (l << 32) >>> 32 else l }
-  private def longToULong(l:Long):BigInt = { val b = BigInt(l); if (l < 0) b & biUlong else b }
-
-  private def readByte():Byte = { checkBuffer(1); currBuffer.get }
-  private def readUByte():Short = byteToUByte(readByte())
-  private def readShort():Short = { checkBuffer(2); currBuffer.getShort }
-  private def readUShort():Int = shortToUShort(readShort())
-  private def readInt():Int = { checkBuffer(4); currBuffer.getInt }
-  private def readUInt():Long = intToUInt(readInt())
-  private def readLong():Long = { checkBuffer(8); currBuffer.getLong }
-  private def readULong():BigInt = longToULong(readLong())
-
-  private def readUleb128():Long = {
-    var num = 0
-    var shift = 0
-    var ubyte = 0
-    do {
-      ubyte = readUByte
-      num |= (ubyte & 0x7f) << shift
-      shift += 7
-    } while((ubyte & 0x80) != 0)
-    num
-  }
-
-  private def readUleb128p1():Long = readUleb128 - 1
-
-  private def readSleb128():Long = {
-    var num = 0
-    var shift = 0
-    var ubyte = 0
-    do {
-      ubyte = readUByte
-      num |= (ubyte & 0x7f) << shift
-      shift += 7
-    } while((ubyte & 0x80) != 0)
-    if ((ubyte & 0x40) == 0) num else num - (1 << shift)
-  }
-
-  private def readMUTF8():String = {
-    val size = readUleb128.safeToInt
-    val strBytes = new Array[Byte](size)
-    checkBuffer(size + 1)
-    currBuffer.get(strBytes)
-    val nullByte = currBuffer.get
-    if (nullByte != 0) throw new OutOfRange("Expected null byte, but found " + nullByte)
-    val ob = new ByteArrayOutputStream
-    val dos = new DataOutputStream(ob)
-    dos.writeChar(size.toChar)
-    ob.write(strBytes,0,size)
-    val dis = new DataInputStream(new ByteArrayInputStream(ob.toByteArray))
-    dis.readUTF
-  }
-
-  private var checksum = 0L
-
-  private val signature = new Array[Byte](20)
   private val header = new Array[Long](20)
+  private val signature = new Array[Byte](20)
+  private var checksum = 0L
+  private var strings:Array[String] = null
+  private var types:Array[String] = null
+  private var prototypes:Array[Prototype] = null
+  private var fields:Array[Field] = null
+  private var methods:Array[Method] = null
+  private var classDefs:Array[ClassDef] = null
+  private var typeMap = Map("V" -> VoidType, "Z" -> BooleanType,
+    "B" -> ByteType, "S" -> ShortType, "C" -> CharType, "I" -> IntType,
+    "J" -> LongType, "F" -> FloatType, "D" -> DoubleType)
 
   private object HeaderField extends Enumeration {
     type HeaderField = Value
-    val fileSize, headerSize, endianTag, linkSize, linkOffset, mapOffset,
-        stringIdsSize, stringIdsOffset, typeIdsSize, typeIdsOffset,
-        protoIdsSize, protoIdsOffset, fieldIdsSize, fieldIdsOffset,
-        methodIdsSize, methodIdsOffset, classDefsSize, classDefsOffset,
-        dataSize, dataOffset = Value
+    val FileSize, HeaderSize, EndianTag, LinkSize, LinkOffset, MapOffset,
+        StringIdsSize, StringIdsOffset, TypeIdsSize, TypeIdsOffset,
+        ProtoIdsSize, ProtoIdsOffset, FieldIdsSize, FieldIdsOffset,
+        MethodIdsSize, MethodIdsOffset, ClassDefsSize, ClassDefsOffset,
+        DataSize, DataOffset = Value
   }
+  import HeaderField._
 
   private def readAndVerifyMagicNumber() {
     DEX_FILE_MAGIC.foreach(
       (x:Int) => {
-         var ubyte = readUByte;
+         var ubyte = reader.readUByte;
          if (ubyte != x)
             throw new AssertionError("start of file does not match dex file number, expected " +
                                      BigInt(x).toString(16) + " but got " + BigInt(ubyte).toString(16))
       })
   }
 
-  private def readSignature() = { checkBuffer(20); currBuffer.get(signature) }
+  private var typeCallbacks = List.empty[(String, JavaType => Unit)]
 
-  def readHeader() {
+  private def lookupType(idx:Int, callback:(JavaType) => Unit):JavaType = {
+    lookupType(types(idx), callback)
+  }
+
+  private def lookupType(name:String, callback:((JavaType) => Unit) = null):JavaType = {
+    if (typeMap isDefinedAt name) {
+      typeMap(name)
+    } else if (name(0) == '[') {
+      val javaType = new ArrayType(null)
+      if (callback != null)
+         javaType.typeOf = lookupType(name.substring(1), ((t: JavaType) => javaType.typeOf = t))
+      else
+         javaType.typeOf = lookupType(name.substring(1))
+      typeMap += name -> javaType
+      javaType
+    } else if (callback != null) {
+      // when we have a callback, setup a callback to try to lookup the class
+      // definition again, and replace the abstract type with the real type.
+      typeCallbacks ::= (name, callback)
+      new AbstractType(name)
+    } else {
+      // when there is no callback, use that abstract type to stand in for a
+      // missing class definition.  These class definitions should be from
+      // builtin libraries or libraries that will be loaded during runtime.
+      val absType = new AbstractType(name)
+      typeMap += name -> absType
+      absType
+    }
+  }
+
+  private def readSignature() = reader.get(signature)
+
+  private def readHeader() {
     readAndVerifyMagicNumber
-    checksum = readInt
-    checksum = intToUInt(checksum.toInt)
+    checksum = reader.readUInt
     readSignature
-    for(i <- 0 to 2) header(i) = readUInt
-    if (header(HeaderField.endianTag.id) == REVERSE_ENDIAN_CONSTANT)
-       currBuffer.order(ByteOrder.BIG_ENDIAN)
-    for(i <- 3 to 19) header(i) = readUInt
+    for(i <- 0 to 2) header(i) = reader.readUInt
+    if (header(EndianTag.id) == REVERSE_ENDIAN_CONSTANT)
+       reader.order(ByteOrder.BIG_ENDIAN)
+    for(i <- 3 to 19) header(i) = reader.readUInt
   }
 
-  class ConversionOutOfRange(msg:String) extends Exception
-  class OutOfRange(msg:String) extends Exception
-
-  class LongConverter(self:Long) {
-    def safeToInt():Int =
-      if (self.isValidInt)
-         self.toInt
-       else
-         throw new ConversionOutOfRange(self + ":Long cannot be converted to an Int")
-  }
-
-  implicit def longToLongConverter(l:Long):LongConverter = new LongConverter(l)
-
-  class Annotation(val visibility:Short, val encodedAnnotation:EncodedValue)
-
-  type AnnotationSet = Array[Annotation]
-  type AnnotationSetRefList = Array[AnnotationSet]
-
-  class FieldAnnotation(val fieldIdx:Long, var annotationSet:AnnotationSet = null)
-  class MethodAnnotation(val methodIdx:Long, var annotationSet:AnnotationSet = null)
-  class ParameterAnnotation(val methodIdx:Long, var annotationSetRefList:AnnotationSetRefList = null)
-
-  class AnnotationsDirectoryItem( 
-    val fieldAnnotations:Array[FieldAnnotation],
-    val methodAnnotations:Array[MethodAnnotation],
-    val parameterAnnotations:Array[ParameterAnnotation],
-    var classAnnotations:AnnotationSet = null)
-
-  class EncodedField(val fieldIdxDiff:Long, val accessFlags:Long)
-
-  class EncodedCatchHandler(val handlers:Array[(Long,Long)], val catchAllAddr:Long)
-
-  class TryItem(val startAddr:Long, val insnCount:Int, val handlerOff:Int)
-
-  sealed abstract class EncodedValue
-  case class EncodedByte(b:Byte) extends EncodedValue
-  case class EncodedShort(s:Short) extends EncodedValue
-  case class EncodedChar(c:Char) extends EncodedValue
-  case class EncodedInt(i:Int) extends EncodedValue
-  case class EncodedLong(l:Long) extends EncodedValue
-  case class EncodedFloat(f:Float) extends EncodedValue
-  case class EncodedDouble(d:Double) extends EncodedValue
-  case class EncodedString(idx:Long) extends EncodedValue
-  case class EncodedType(idx:Long) extends EncodedValue
-  case class EncodedFieldVal(idx:Long) extends EncodedValue
-  case class EncodedMethodVal(idx:Long) extends EncodedValue
-  case class EncodedEnum(idx:Long) extends EncodedValue
-  case class EncodedArray(vals:Array[EncodedValue]) extends EncodedValue
-  case class EncodedAnnotation(typeIdx:Long, elements:Array[(Long, EncodedValue)]) extends EncodedValue
-  case object EncodedNull extends EncodedValue
-  case class EncodedBoolean(b:Boolean) extends EncodedValue
-
-  class CodeItem(val registerSize:Int, val insSize:Int, val outsSize:Int,
-    val insns:Array[Int], val tries:Array[TryItem],
-    val handlers:Array[EncodedCatchHandler], var debugInfo:DebugInfo = null)
-
-  sealed abstract class DebugByteCode
-  case object DebugEndSequence extends DebugByteCode
-  case class DebugAdvancePC(addrDiff:Long) extends DebugByteCode
-  case class DebugAdvanceLine(lineDiff:Long) extends DebugByteCode
-  case class DebugStartLocal(registerNum:Long,nameIdx:Long,typeIdx:Long) extends DebugByteCode
-  case class DebugStartLocalExtended(registerNum:Long,nameIdx:Long,typeIdx:Long,sigIdx:Long) extends DebugByteCode
-  case class DebugEndLocal(registerNum:Long) extends DebugByteCode
-  case class DebugRestartLocal(registerNum:Long) extends DebugByteCode
-  case object DebugSetPrologueEnd extends DebugByteCode
-  case object DebugSetEpilogueBegin extends DebugByteCode
-  case class DebugSetFile(nameIdx:Long) extends DebugByteCode
-  case class DebugSpecial(opcode:Short) extends DebugByteCode
-
-  class DebugInfo(val lineStart:Long, val parameterNamesIdx:Array[Long],
-    val debugCode:Array[DebugByteCode])
-
-  class EncodedMethod(val methodIdxDiff:Long, val accessFlags:Long,
-    var code:CodeItem = null)
-
-  class ClassDataItem(val staticFields:Array[EncodedField],
-    val instanceFields:Array[EncodedField],
-    val directMethods:Array[EncodedMethod],
-    val virtualMethods:Array[EncodedMethod])
-
-  class ClassDef(val classIdx:Long, val accessFlags:Long,
-    val superclassIdx:Long, val sourceFileIdx:Long,
-    var interfaces:Array[Int] = null,
-    var annotations:AnnotationsDirectoryItem = null,
-    var classData:ClassDataItem = null, var staticValues:Array[EncodedValue] = null)
-
-  object AnnotationType extends Enumeration {
-    type AnnotationType = Value
-    val ClassAnnotation, FieldAnnotation, MethodAnnotation = Value
-  }
-  import AnnotationType._
-
-  sealed abstract class DataItem
-  case class StringItem(idx:Long) extends DataItem
-  case class ProtoItem(idx:Long, shortyIdx:Long, returnTypeIdx:Long) extends DataItem
-  case class ClassDefInterfacesItem(cd:ClassDef) extends DataItem
-  case class ClassDefAnnotationsItem(cd:ClassDef) extends DataItem
-  case class ClassDefClassDataItem(cd:ClassDef) extends DataItem
-  case class ClassDefStaticValuesItem(cd:ClassDef) extends DataItem
-  case object MapList extends DataItem
-  case class ClassAnnotationSetItem(ad:AnnotationsDirectoryItem) extends DataItem
-  case class FieldAnnotationSetItem(fa:FieldAnnotation) extends DataItem
-  case class MethodAnnotationSetItem(ma:MethodAnnotation) extends DataItem
-  case class ParameterAnnotationSetItem(asrl:AnnotationSetRefList,i:Long) extends DataItem
-  case class ParameterAnnotationSetRefItem(pa:ParameterAnnotation) extends DataItem
-  case class AnnotationItem(as:AnnotationSet,i:Long) extends DataItem
-  case class EncodedMethodCodeItem(em:EncodedMethod) extends DataItem
-  case class DebugInfoItem(ci:CodeItem) extends DataItem
-
-  private var dataMap = TreeMap.empty[Long,DataItem]
-  var strings:Array[String] = null
-  var types:Array[Long] = null
-  var protos:Array[(Long, Long, Array[Int])] = null
-  var fields:Array[(Int, Int, Long)] = null
-  var methods:Array[(Int, Int, Long)] = null
-  var classDefs:Array[ClassDef] = null
-
-  def readSome(read:(Long) => Unit, pos:Long, size:Long) {
-    if (position != pos) throw new StreamCorruptedException("Expected to start read at position " + 
-       pos + " but, stream is at position " + position)
-    for(i <- 0L until size) read(i)
-  }
-
-  def readStringId(idx:Long):Unit = dataMap += (readUInt -> new StringItem(idx))
-  def readTypeId(idx:Long):Unit = types(idx.safeToInt) = readUInt
-  def readProtoId(idx:Long):Unit = {
-    val shortyIdx = readUInt
-    val returnTypeIdx = readUInt
-    val parametersOff = readUInt
-    if (parametersOff == 0)
-      protos(idx.safeToInt) = (shortyIdx, returnTypeIdx, new Array[Int](0))
-    else 
-      dataMap += parametersOff -> ProtoItem(idx, shortyIdx, returnTypeIdx)
-  }
-  def readFieldId(idx:Long):Unit = {
-    val classIdx = readUShort
-    val typeIdx = readUShort
-    val nameIdx = readUInt
-    fields(idx.safeToInt) = (classIdx, typeIdx, nameIdx)
-  }
-  def readMethodId(idx:Long):Unit = {
-    val classIdx = readUShort
-    val protoIdx = readUShort
-    val nameIdx = readUInt
-    methods(idx.safeToInt) = (classIdx, protoIdx, nameIdx)
-  }
-  def readClassDef(idx:Long):Unit = {
-    val classIdx = readUInt
-    val accessFlags = readUInt
-    val superclassIdx = readUInt
-    val interfacesOff = readUInt
-    val sourceFileIdx = readUInt
-    val annotationsOff = readUInt
-    val classDataOff = readUInt
-    val staticValuesOff = readUInt
-    val cd = new ClassDef(classIdx, accessFlags, superclassIdx, sourceFileIdx)
-    if (interfacesOff != 0) dataMap += interfacesOff -> new ClassDefInterfacesItem(cd)
-    if (annotationsOff != 0) dataMap += annotationsOff -> new ClassDefAnnotationsItem(cd)
-    if (classDataOff != 0) dataMap += classDataOff -> new ClassDefClassDataItem(cd)
-    if (staticValuesOff != 0) dataMap += staticValuesOff -> new ClassDefStaticValuesItem(cd)
-    classDefs(idx.safeToInt) = cd
-  }
-
-  def readIntoBuffer(size:Long):ByteBuffer = {
-    var isize = size.safeToInt
-    val tmpBuffer = ByteBuffer.allocate(isize).order(currBuffer.order)
-    val bytes = new Array[Byte](BUFFER_SIZE)
-
-    while(isize > BUFFER_SIZE) {
-      checkBuffer(BUFFER_SIZE)
-      currBuffer.get(bytes)
-      tmpBuffer.put(bytes)
-      isize -= BUFFER_SIZE
+  private def readStrings() {
+    val stringsSize = header(StringIdsSize.id).safeToInt
+    strings = new Array[String](stringsSize)
+    reader.checkPosition(header(StringIdsOffset.id))
+    for(i <- 0 until stringsSize) {
+      val offset = reader.readUInt
+      val pos = reader.position
+      reader.position(offset)
+      strings(i) = reader.readUTF
+      reader.position(pos)
     }
-    checkBuffer(isize)
-    currBuffer.get(bytes,0,isize)
-    tmpBuffer.put(bytes,0,isize)
-    tmpBuffer.rewind
-    tmpBuffer
   }
 
-  def readString(idx:Long):Unit = strings(idx.safeToInt) = readMUTF8
-  def readProtoParameters(idx:Long,shortyIdx:Long,returnTypeIdx:Long):Unit = {
-    val size = readUInt
-    val typeIdxes = new Array[Int](size.safeToInt)
-    for(i <- 0L until size) typeIdxes(i.safeToInt) = readUShort
-    protos(idx.safeToInt) = (shortyIdx, returnTypeIdx, typeIdxes)
-  }
-  def readInterfaces(cd:ClassDef) {
-    val size = readUInt
-    val typeIdxes = new Array[Int](size.safeToInt)
-    for(i <- 0L until size) typeIdxes(i.safeToInt) = readUShort
-    cd.interfaces = typeIdxes
-  }
-  def readAnnotationsDirectory(cd:ClassDef) {
-    val classAnnotationOff = readUInt
-    val fieldsSize = readUInt
-    val annotatedMethodsSize = readUInt
-    val annotatedParametersSize = readUInt
-    val fields = new Array[FieldAnnotation](fieldsSize.safeToInt)
-    val methods = new Array[MethodAnnotation](annotatedMethodsSize.safeToInt)
-    val parameters = new Array[ParameterAnnotation](annotatedParametersSize.safeToInt)
-    val ad = new AnnotationsDirectoryItem(fields, methods, parameters)
-    if (classAnnotationOff != 0) dataMap += classAnnotationOff -> ClassAnnotationSetItem(ad)
-    for(i <- 0L until fieldsSize) {
-      val fieldIdx = readUInt
-      val fa = new FieldAnnotation(fieldIdx)
-      fields(i.safeToInt) = fa
-      dataMap += readUInt -> FieldAnnotationSetItem(fa)
+  private def readTypes() {
+    val typesSize = header(TypeIdsSize.id).safeToInt
+    types = new Array[String](typesSize)
+    reader.checkPosition(header(TypeIdsOffset.id))
+    for(i <- 0 until typesSize) {
+      val offset = reader.readUInt
+      types(i) = strings(offset.safeToInt)
     }
-    for(i <- 0L until annotatedMethodsSize) {
-      val methodIdx = readUInt
-      val ma = new MethodAnnotation(methodIdx)
-      methods(i.safeToInt) = ma
-      dataMap += readUInt -> MethodAnnotationSetItem(ma)
-    }
-    for(i <- 0L until annotatedParametersSize) {
-      val methodIdx = readUInt
-      val pa = new ParameterAnnotation(methodIdx)
-      dataMap += readUInt -> ParameterAnnotationSetRefItem(pa)
-    }
-    cd.annotations = ad
   }
-  def readEncodedFields(size:Int):Array[EncodedField] = {
-    val fields = new Array[EncodedField](size)
+  
+  private def maybeReadTypeList(off:Long):Array[JavaType] = {
+    if (off == 0L) {
+       null
+    } else {
+      val pos = reader.position
+      reader.position(off)
+      val size = reader.readUInt
+      val typeList = new Array[JavaType](size.safeToInt)
+      for(i <- 0 until size.safeToInt) {
+        val typeIdx = reader.readUShort
+        typeList(i) = lookupType(typeIdx, ((t: JavaType) => typeList(i) = t))
+      }
+      reader.position(pos)
+      typeList
+    }
+  }
+
+  private def readPrototypes() {
+    val protosSize = header(ProtoIdsSize.id).safeToInt
+    prototypes = new Array[Prototype](protosSize)
+    reader.checkPosition(header(ProtoIdsOffset.id))
+    for(i <- 0 until protosSize) {
+      val shortyIdx = reader.readUInt
+      val returnTypeIdx = reader.readUInt
+      val parametersOff = reader.readUInt
+      val parameters = maybeReadTypeList(parametersOff)
+      
+      prototypes(i) = new Prototype(strings(shortyIdx.safeToInt),
+        lookupType(returnTypeIdx.safeToInt, ((t: JavaType) => prototypes(i).returnType = t)),
+        parameters)
+    }
+  }
+
+  private def readFields() {
+    val fieldsSize = header(FieldIdsSize.id).safeToInt
+    fields = new Array[Field](fieldsSize)
+    reader.checkPosition(header(FieldIdsOffset.id))
+    for(i <- 0 until fieldsSize) {
+      val classIdx = reader.readUShort
+      val typeIdx = reader.readUShort
+      val nameIdx = reader.readUInt
+      fields(i) = new Field(lookupType(classIdx, ((t: JavaType) => fields(i).classType = t)),
+                            lookupType(typeIdx, ((t: JavaType) => fields(i).fieldType = t)),
+                            strings(nameIdx.safeToInt))
+    }
+  }
+
+  private def readMethods() {
+    val methodsSize = header(MethodIdsSize.id).safeToInt
+    methods = new Array[Method](methodsSize)
+    reader.checkPosition(header(MethodIdsOffset.id))
+    for(i <- 0 until methodsSize) {
+      val classIdx = reader.readUShort
+      val typeIdx = reader.readUShort
+      val nameIdx = reader.readUInt
+      methods(i) = new Method(lookupType(classIdx, ((t: JavaType) => methods(i).classType = t)),
+          prototypes(typeIdx), strings(nameIdx.safeToInt))
+    }
+  }
+
+  private def readAnnotationSetRefList(off:Long):Array[Array[AnnotationItem]] = {
+    val pos = reader.position
+    reader.position(off)
+    val size = reader.readUInt.safeToInt
+    val annotationSetRefList = new Array[Array[AnnotationItem]](size)
+    for(i <- 0 until size)
+      annotationSetRefList(i) = readAnnotationSetItem(reader.readUInt)
+    reader.position(pos)
+    annotationSetRefList
+  }
+
+  private def readAnnotationItem(off:Long):AnnotationItem = {
+    val pos = reader.position
+    reader.position(off)
+    val visibility = reader.readUByte 
+    val annotation = readEncodedAnnotation
+    val annotationItem = new AnnotationItem(visibility, annotation)
+    reader.position(pos)
+    annotationItem
+  }
+
+  private def readAnnotationSetItem(off:Long):Array[AnnotationItem] = {
+    val pos = reader.position
+    reader.position(off)
+    val size = reader.readUInt.safeToInt
+    val annotations = new Array[AnnotationItem](size)
+    for(i <- 0 until size) annotations(i) = readAnnotationItem(reader.readUInt)
+    reader.position(pos)   
+    annotations
+  }
+
+  private def maybeReadAnnotationSetItem(off:Long):Array[AnnotationItem] = 
+    if (0L == off) null else readAnnotationSetItem(off)
+
+  private def maybeReadAnnotationsDirectoryItem(off:Long):AnnotationsDirectoryItem = {
+    if (0L == off) {
+      null
+    } else {
+      val pos = reader.position
+      reader.position(off)
+      val classAnnotationOff = reader.readUInt
+      val fieldsSize = reader.readUInt.safeToInt
+      val annotatedMethodsSize = reader.readUInt.safeToInt
+      val annotatedParametersSize = reader.readUInt.safeToInt
+      val fieldAnnotations = new Array[FieldAnnotation](fieldsSize)
+      val methodAnnotations = new Array[MethodAnnotation](annotatedMethodsSize)
+      val parameterAnnotations = new Array[ParameterAnnotation](annotatedParametersSize)
+      val classAnnotations = maybeReadAnnotationSetItem(classAnnotationOff)
+      for(i <- 0 until fieldsSize) {
+        val fieldIdx = reader.readUInt
+        val annotationsOff = reader.readUInt
+        val annotations = readAnnotationSetItem(annotationsOff)
+        fieldAnnotations(i) = new FieldAnnotation(fields(fieldIdx.safeToInt), annotations)
+      }
+      for(i <- 0 until annotatedMethodsSize) {
+        val methodIdx = reader.readUInt
+        val annotationsOff = reader.readUInt
+        val annotations = readAnnotationSetItem(annotationsOff)
+        methodAnnotations(i) = new MethodAnnotation(methods(methodIdx.safeToInt), annotations)
+      }
+      for(i <- 0 until annotatedParametersSize) {
+        val methodIdx = reader.readUInt
+        val annotationsOff = reader.readUInt
+        val annotations = readAnnotationSetRefList(annotationsOff)
+        parameterAnnotations(i) = new ParameterAnnotation(methods(methodIdx.safeToInt), annotations)
+      }
+      reader.position(pos)
+      new AnnotationsDirectoryItem(classAnnotations, fieldAnnotations, methodAnnotations, parameterAnnotations)
+    }
+  }
+
+  private def readEncodedFields(size:Int):Array[EncodedField] = {
+    val fieldArray = new Array[EncodedField](size)
+    var fieldIdx = 0
     for(i <- 0 until size) {
-      val fieldIdxDiff = readUleb128
-      val accessFlags = readUleb128
-      fields(i) = new EncodedField(fieldIdxDiff, accessFlags)
+      fieldIdx += reader.readUleb128.safeToInt
+      fieldArray(i) = new EncodedField(fields(fieldIdx), reader.readUleb128)
     }
-    fields
+    fieldArray
   }
-  def readEncodedMethods(size:Int):Array[EncodedMethod] = {
-    val methods = new Array[EncodedMethod](size)
-    for(i <- 0 until size) {
-      val methodIdxDiff = readUleb128
-      val accessFlags = readUleb128
-      val codeOff = readUleb128
-      val em = new EncodedMethod(methodIdxDiff, accessFlags)
-      methods(i) = em
-      if (codeOff != 0) dataMap += codeOff -> EncodedMethodCodeItem(em)
-    }
-    methods
-  }
-  def readClassData(cd:ClassDef) {
-    val staticFieldsSize = readUleb128
-    val instanceFieldsSize = readUleb128
-    val directMethodsSize = readUleb128
-    val virtualMethodsSize = readUleb128
-    val staticFields = readEncodedFields(staticFieldsSize.safeToInt)
-    val instanceFields = readEncodedFields(instanceFieldsSize.safeToInt)
-    val directMethods = readEncodedMethods(directMethodsSize.safeToInt)
-    val virtualMethods = readEncodedMethods(virtualMethodsSize.safeToInt)
-    cd.classData = new ClassDataItem(staticFields, instanceFields, directMethods, virtualMethods)
+  
+  private def readPackedSwitchPayload():(Int, PackedSwitchPayload) = {
+    val size = reader.readUShort
+    val targets = new Array[Int](size)
+    val firstKey = reader.readInt
+    for(i <- 0 until size) targets(i) = reader.readInt
+    ((size * 2) + 4, new PackedSwitchPayload(firstKey, targets))
   }
 
-  def checkRangeInclusive(v:Int, min:Int, max:Int) = 
+  private def readSparseSwitchPayload():(Int, SparseSwitchPayload) = {
+    val size = reader.readUShort
+    val keys = new Array[Int](size)
+    val targets = new Array[Int](size)
+    for(i <- 0 until size) keys(i) = reader.readInt
+    for(i <- 0 until size) targets(i) = reader.readInt
+    ((size * 4) + 2, new SparseSwitchPayload(keys, targets))
+  }
+
+  private def readFillArrayDataPayload():(Int, FillArrayDataPayload) = {
+    val elementWidth = reader.readUShort
+    val size = reader.readUInt
+    val byteCount = size.safeToInt * elementWidth
+    val data = new Array[Short](size.safeToInt * elementWidth)
+    for(i <- 0 until byteCount) data(i) = reader.readUByte
+    ((((size * elementWidth + 1) / 2) + 4).safeToInt,
+     new FillArrayDataPayload(size, elementWidth, data))
+  }
+
+  private def readInstructionFormat00op(opcode:Short):(Int, Instruction) = {
+    val b = reader.readUByte
+    if (opcode == 0x00) {
+      if (b == 0x01) {
+        readPackedSwitchPayload()
+      } else if (b == 0x02) {
+        readSparseSwitchPayload()
+      } else if (b == 0x03) {
+        readFillArrayDataPayload()
+      } else if (b == 0) {
+        (1, Nop)
+      } else {
+        throw new Exception("Expected 0 byte in 00|op format: " + b)
+      }
+    } else if (b != 0) {
+      throw new Exception("Expected 0 byte in 00|op format: " + b)
+    } else {
+      (1, opcode match {
+            case 0x00 => Nop
+            case 0x0e => ReturnVoid
+            case num if 0x3e to 0x43 contains num => throw new Exception("Unexpected opcode in unused range: " + opcode)
+            case 0x73 => throw new Exception("Unexpected opcode in unused range: " + opcode)
+            case 0x79 => throw new Exception("Unexpected opcode in unused range: " + opcode)
+            case 0x7a => throw new Exception("Unexpected opcode in unused range: " + opcode)
+            case num if 0xe3 to 0xff contains num => throw new Exception("Unexpected opcode in unused range: " + opcode)
+            case _ => throw new Exception("Received opcode for unknown format in 00|op format: " + opcode)
+          })
+    }
+  }
+
+  private def readInstructionFormatBAop(opcode:Short):Instruction = {
+    val BA = reader.readUByte
+    val B = (BA >>> 4).toByte
+    val A = (BA & 0x0f).toByte
+    opcode match {
+      case 0x01 => Move(A, B)
+      case 0x04 => MoveWide(A, B)
+      case 0x07 => MoveObject(A, B)
+      case 0x12 => Const4(A, ((B << 28) >> 28)) // sign extend the constant to 32-bits
+      case 0x21 => ArrayLength(A, B)
+      case 0x7b => NegInt(A, B)
+      case 0x7c => NotInt(A, B)
+      case 0x7d => NegLong(A, B)
+      case 0x7e => NotLong(A, B)
+      case 0x7f => NegFloat(A, B)
+      case 0x80 => NegDouble(A, B)
+      case 0x81 => IntToLong(A, B)
+      case 0x82 => IntToFloat(A, B)
+      case 0x83 => IntToDouble(A, B)
+      case 0x84 => LongToInt(A, B)
+      case 0x85 => LongToFloat(A, B)
+      case 0x86 => LongToDouble(A, B)
+      case 0x87 => FloatToInt(A, B)
+      case 0x88 => FloatToLong(A, B)
+      case 0x89 => FloatToDouble(A, B)
+      case 0x8a => DoubleToInt(A, B)
+      case 0x8b => DoubleToLong(A, B)
+      case 0x8c => DoubleToFloat(A, B)
+      case 0x8d => IntToByte(A, B)
+      case 0x8e => IntToChar(A, B)
+      case 0x8f => IntToShort(A, B)
+      case 0xb0 => AddInt2Addr(A, B)
+      case 0xb1 => SubInt2Addr(A, B)
+      case 0xb2 => MulInt2Addr(A, B)
+      case 0xb3 => DivInt2Addr(A, B)
+      case 0xb4 => RemInt2Addr(A, B)
+      case 0xb5 => AndInt2Addr(A, B)
+      case 0xb6 => OrInt2Addr(A, B)
+      case 0xb7 => XorInt2Addr(A, B)
+      case 0xb8 => ShlInt2Addr(A, B)
+      case 0xb9 => ShrInt2Addr(A, B)
+      case 0xba => UshrInt2Addr(A, B)
+      case 0xbb => AddLong2Addr(A, B)
+      case 0xbc => SubLong2Addr(A, B)
+      case 0xbd => MulLong2Addr(A, B)
+      case 0xbe => DivLong2Addr(A, B)
+      case 0xbf => RemLong2Addr(A, B)
+      case 0xc0 => AndLong2Addr(A, B)
+      case 0xc1 => OrLong2Addr(A, B)
+      case 0xc2 => XorLong2Addr(A, B)
+      case 0xc3 => ShlLong2Addr(A, B)
+      case 0xc4 => ShrLong2Addr(A, B)
+      case 0xc5 => UshrLong2Addr(A, B)
+      case 0xc6 => AddFloat2Addr(A, B)
+      case 0xc7 => SubFloat2Addr(A, B)
+      case 0xc8 => MulFloat2Addr(A, B)
+      case 0xc9 => DivFloat2Addr(A, B)
+      case 0xca => RemFloat2Addr(A, B)
+      case 0xcb => AddDouble2Addr(A, B)
+      case 0xcc => SubDouble2Addr(A, B)
+      case 0xcd => MulDouble2Addr(A, B)
+      case 0xce => DivDouble2Addr(A, B)
+      case 0xcf => RemDouble2Addr(A, B)
+      case _ => throw new Exception("Received opcode for unknown format in B|A|op format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAAop(opcode:Short):Instruction = {
+    val AA = reader.readUByte
+    opcode match {
+      case 0x0a => MoveResult(AA)
+      case 0x0b => MoveResultWide(AA)
+      case 0x0c => MoveResultObject(AA)
+      case 0x0d => MoveException(AA)
+      case 0x0f => Return(AA)
+      case 0x10 => ReturnWide(AA)
+      case 0x11 => ReturnObject(AA)
+      case 0x1d => MonitorEnter(AA)
+      case 0x1e => MonitorExit(AA)
+      case 0x27 => Throw(AA)
+      case 0x28 => Goto((AA << 24) >> 24) // sign extend to integer
+      case _ => throw new Exception("Received opcode for unknown format in AA|op format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormat00op_AAAA(opcode:Short):Instruction = {
+    val nullByte = reader.readUByte
+    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA format but got: " + nullByte)
+    val AAAA = reader.readShort // read a signed short so we don't need to bother with sign extending
+    opcode match {
+      case 0x29 => Goto16(AAAA.toInt)
+      case _ => throw new Exception("Received opcode for unknown format in 00|op AAAA format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAAop_BBBB(opcode:Short):Instruction = {
+    val AA = reader.readUByte
+    val BBBB = reader.readUShort
+    opcode match {
+      case 0x02 => MoveFrom16(AA, BBBB)
+      case 0x05 => MoveWideFrom16(AA, BBBB)
+      case 0x08 => MoveObjectFrom16(AA, BBBB)
+      case 0x13 => Const16(AA, (BBBB << 16) >> 16) // sign extend to 32-bit constant
+      case 0x15 => ConstHigh16(AA, (BBBB << 16)) // right-zero extend constant
+      case 0x16 => ConstWide16(AA, (BBBB.toLong << 48) >> 48) // sign extend to 64-bit constant
+      case 0x19 => ConstWideHigh16(AA, BBBB.toLong << 48) // right-zero extend constant
+      case 0x1a => ConstString(AA, strings(BBBB)) // lookup the string from the constants pool
+      case 0x1c => {
+        val ins = ConstClass(AA, null)
+        // lookup the type from the constants pool, and setup a callback if it is not yet available
+        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins
+      }
+      case 0x1f => {
+        val ins = CheckCast(AA, null)
+        // lookup the type from the constants pool, and setup a callback if it is not yet available
+        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins
+      }
+      case 0x22 => {
+        val ins = NewInstance(AA, null)
+        // lookup the type from the constants pool, and setup a callback if it is not yet available
+        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins
+      }
+      case 0x38 => IfEqz(AA, (BBBB << 16) >> 16) // sign extend target
+      case 0x39 => IfNez(AA, (BBBB << 16) >> 16) // sign extend target
+      case 0x3a => IfLtz(AA, (BBBB << 16) >> 16) // sign extend target
+      case 0x3b => IfGez(AA, (BBBB << 16) >> 16) // sign extend target
+      case 0x3c => IfGtz(AA, (BBBB << 16) >> 16) // sign extend target
+      case 0x3d => IfLez(AA, (BBBB << 16) >> 16) // sign extend target
+      case 0x60 => SGet(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x61 => SGetWide(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x62 => SGetObject(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x63 => SGetBoolean(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x64 => SGetByte(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x65 => SGetChar(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x66 => SGetShort(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x67 => SPut(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x68 => SPutWide(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x69 => SPutObject(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x6a => SPutBoolean(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x6b => SPutByte(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x6c => SPutChar(AA, fields(BBBB)) // lookup field from constants pool
+      case 0x6d => SPutShort(AA, fields(BBBB)) // lookup field from constants pool
+      case _ => throw new Exception("Received opcode for unknown format in AA|op BBBB format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAAop_CCBB(opcode:Short):Instruction = {
+    val AA = reader.readUByte
+    val BB = reader.readUByte
+    val CC = reader.readUByte
+    opcode match {
+      case 0x2d => CmplFloat(AA, BB, CC)
+      case 0x2e => CmpgFloat(AA, BB, CC)
+      case 0x2f => CmplDouble(AA, BB, CC)
+      case 0x30 => CmpgDouble(AA, BB, CC)
+      case 0x31 => CmpLong(AA, BB, CC)
+      case 0x44 => AGet(AA, BB, CC)
+      case 0x45 => AGetWide(AA, BB, CC)
+      case 0x46 => AGetObject(AA, BB, CC)
+      case 0x47 => AGetBoolean(AA, BB, CC)
+      case 0x48 => AGetByte(AA, BB, CC)
+      case 0x49 => AGetChar(AA, BB, CC)
+      case 0x4a => AGetShort(AA, BB, CC)
+      case 0x4b => APut(AA, BB, CC)
+      case 0x4c => APutWide(AA, BB, CC)
+      case 0x4d => APutObject(AA, BB, CC)
+      case 0x4e => APutBoolean(AA, BB, CC)
+      case 0x4f => APutByte(AA, BB, CC)
+      case 0x50 => APutChar(AA, BB, CC)
+      case 0x51 => APutShort(AA, BB, CC)
+      case 0x90 => AddInt(AA, BB, CC)
+      case 0x91 => SubInt(AA, BB, CC)
+      case 0x92 => MulInt(AA, BB, CC)
+      case 0x93 => DivInt(AA, BB, CC)
+      case 0x94 => RemInt(AA, BB, CC)
+      case 0x95 => AndInt(AA, BB, CC)
+      case 0x96 => OrInt(AA, BB, CC)
+      case 0x97 => XorInt(AA, BB, CC)
+      case 0x98 => ShlInt(AA, BB, CC)
+      case 0x99 => ShrInt(AA, BB, CC)
+      case 0x9a => UshrInt(AA, BB, CC)
+      case 0x9b => AddLong(AA, BB, CC)
+      case 0x9c => SubLong(AA, BB, CC)
+      case 0x9d => MulLong(AA, BB, CC)
+      case 0x9e => DivLong(AA, BB, CC)
+      case 0x9f => RemLong(AA, BB, CC)
+      case 0xa0 => AndLong(AA, BB, CC)
+      case 0xa1 => OrLong(AA, BB, CC)
+      case 0xa2 => XorLong(AA, BB, CC)
+      case 0xa3 => ShlLong(AA, BB, CC)
+      case 0xa4 => ShrLong(AA, BB, CC)
+      case 0xa5 => UshrLong(AA, BB, CC)
+      case 0xa6 => AddFloat(AA, BB, CC)
+      case 0xa7 => SubFloat(AA, BB, CC)
+      case 0xa8 => MulFloat(AA, BB, CC)
+      case 0xa9 => DivFloat(AA, BB, CC)
+      case 0xaa => RemFloat(AA, BB, CC)
+      case 0xab => AddDouble(AA, BB, CC)
+      case 0xac => SubDouble(AA, BB, CC)
+      case 0xad => MulDouble(AA, BB, CC)
+      case 0xae => DivDouble(AA, BB, CC)
+      case 0xaf => RemDouble(AA, BB, CC)
+      case 0xd8 => AddIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xd9 => RsubIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xda => MulIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xdb => DivIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xdc => RemIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xdd => AndIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xde => OrIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xdf => XorIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xe0 => ShlIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xe1 => ShrIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case 0xe2 => UshrIntLit8(AA, BB, (CC << 28) >> 28) // sign extend to 32-bit constant
+      case _ => throw new Exception("Received opcode for unknown format in AA|op CC|BB format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatBAop_CCCC(opcode:Short):Instruction = {
+    val BA = reader.readUByte
+    val B = (BA >>> 4).toByte
+    val A = (BA & 0x0f).toByte
+    val CCCC = reader.readUShort
+    opcode match {
+      case 0x20 => {
+        val ins = InstanceOf(A, B, null)
+        // lookup type in constants pool, and setup a callback if it is not yet available
+        ins.C = lookupType(CCCC, ((t: JavaType) => ins.C = t))
+        ins
+      }
+      case 0x23 => {
+        val ins = NewArray(A, B, null)
+        // lookup type in constants pool, and setup a callback if it is not yet available
+        ins.C = lookupType(CCCC, ((t: JavaType) => ins.C = t))
+        ins
+      }
+      case 0x32 => IfEq(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0x33 => IfNe(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0x34 => IfLt(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0x35 => IfGe(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0x36 => IfGt(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0x37 => IfLe(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0x52 => IGet(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x53 => IGetWide(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x54 => IGetObject(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x55 => IGetBoolean(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x56 => IGetByte(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x57 => IGetChar(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x58 => IGetShort(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x59 => IPut(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x5a => IPutWide(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x5b => IPutObject(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x5c => IPutBoolean(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x5d => IPutByte(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x5e => IPutChar(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0x5f => IPutShort(A, B, fields(CCCC)) // lookup field in constants pool
+      case 0xd0 => AddIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd1 => RsubInt(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd2 => MulIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd3 => DivIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd4 => RemIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd5 => AndIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd6 => OrIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case 0xd7 => XorIntLit16(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
+      case _ => throw new Exception("Received opcode for unknown format in B|A|op CCCC format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormat00op_AAAA_AAAA(opcode:Short):Instruction = {
+    val nullByte = reader.readUByte
+    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA AAAA format but got: " + nullByte)
+    val AAAA_AAAA = reader.readInt
+    opcode match {
+      case 0x2a => Goto32(AAAA_AAAA)
+      case _ => throw new Exception("Received opcode for unknown format in 00|op AAAA_lo AAAA_hi format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormat00op_AAAA_BBBB(opcode:Short):Instruction = {
+    val nullByte = reader.readUByte
+    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA AAAA format but got: " + nullByte)
+    val AAAA = reader.readUShort
+    val BBBB = reader.readUShort
+    opcode match {
+      case 0x03 => Move16(AAAA, BBBB)
+      case 0x06 => MoveWide16(AAAA, BBBB)
+      case 0x09 => MoveObject16(AAAA, BBBB)
+      case _ => throw new Exception("Received opcode for unknown format in 00|op AAAA BBBB format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAAop_BBBB_BBBB(opcode:Short):Instruction = {
+    val AA = reader.readUByte
+    val BBBB_BBBB = reader.readUInt
+    opcode match {
+      case 0x14 => Const(AA, BBBB_BBBB.toInt) // convert from unsigned int (Long) to signed int
+      case 0x17 => ConstWide32(AA, (BBBB_BBBB << 32) >> 32) // sign extend to 64-bit
+      case 0x1b => ConstStringJumbo(AA, strings(BBBB_BBBB.safeToInt))
+      case 0x26 => TempFillArrayData(AA, BBBB_BBBB.toInt) // convert from unsigned int (Long) to signed int
+      case 0x2b => TempPackedSwitch(AA, BBBB_BBBB.toInt) // convert from unsigned int (Long) to signed int
+      case 0x2c => TempSparseSwitch(AA, BBBB_BBBB.toInt) // convert from unsigned int (Long) to signed int
+      case _ => throw new Exception("Received opcode for unknown format in AA|op BBBB_lo BBBB_hi format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAGop_BBBB_FEDC(opcode:Short):Instruction = {
+    val AG = reader.readUByte
+    val A = (AG >>> 4).toByte
+    val G = (AG & 0x0f).toByte
+    val BBBB = reader.readUShort
+    val DC = reader.readUByte
+    val D = (DC >>> 4).toByte
+    val C = (DC & 0x0f).toByte
+    val FE = reader.readUByte
+    val F = (DC >>> 4).toByte
+    val E = (DC & 0x0f).toByte
+    val refs = A match {
+                 case 0 => Array[Byte]()
+                 case 1 => Array(C)
+                 case 2 => Array(C, D)
+                 case 3 => Array(C, D, E)
+                 case 4 => Array(C, D, E, F)
+                 case 5 => Array(C, D, E, F, G)
+                 case _ => throw new Exception("Recieved larger count that available registers")
+               }
+
+    opcode match {
+      case 0x24 => {
+        val ins = FilledNewArray(refs, null)
+        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins
+      }
+      case 0x6e => InvokeVirtual(refs, methods(BBBB))
+      case 0x6f => InvokeSuper(refs, methods(BBBB))
+      case 0x70 => InvokeDirect(refs, methods(BBBB))
+      case 0x71 => InvokeStatic(refs, methods(BBBB))
+      case 0x72 => InvokeInterface(refs, methods(BBBB))
+      case _ => throw new Exception("Received opcode for unknown format in A|G|op BBBB F|E|D|C format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAAop_BBBB_CCCC(opcode:Short):Instruction = {
+    val AA = reader.readUByte
+    val BBBB = reader.readUShort
+    val CCCC = reader.readUShort
+    opcode match {
+      case 0x25 => {
+        val ins = FilledNewArrayRange(CCCC, AA, null)
+        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins
+      }
+      case 0x74 => InvokeVirtualRange(CCCC, AA, methods(BBBB))
+      case 0x75 => InvokeSuperRange(CCCC, AA, methods(BBBB))
+      case 0x76 => InvokeDirectRange(CCCC, AA, methods(BBBB))
+      case 0x77 => InvokeStaticRange(CCCC, AA, methods(BBBB))
+      case 0x78 => InvokeInterfaceRange(CCCC, AA, methods(BBBB))
+      case _ => throw new Exception("Received opcode for unknown format in AA|op BBBB CCCC format: " + opcode)
+    }
+  }
+
+  private def readInstructionFormatAAop_BBBB_BBBB_BBBB_BBBB(opcode:Short):Instruction = {
+    val AA = reader.readUByte
+    val BBBB_BBBB_BBBB_BBBB = reader.readLong
+    opcode match {
+      case 0x18 => ConstWide(AA, BBBB_BBBB_BBBB_BBBB)
+      case _ => throw new Exception("Received opcode for unknown format in AA|op BBBB BBBB BBBB BBBB format: " + opcode)
+    }
+  }
+
+  private def readInstruction():(Int,Instruction) = {
+    val opcode = reader.readUByte
+    if (opcode == 0x00 || opcode == 0x0e || (opcode >= 0x3e && opcode <= 0x43) || opcode == 0x73 || opcode == 0x79 || opcode == 0x7a || (opcode >= 0xe3 && opcode <= 0xff)) {
+      readInstructionFormat00op(opcode)
+    } else if (opcode == 0x01 || opcode == 0x04 || opcode == 0x07 || opcode == 0x12 || opcode == 0x21 || (opcode >= 0x7b && opcode <= 0x8f) || (opcode >= 0xb0 && opcode <= 0xcf)) {
+      (1, readInstructionFormatBAop(opcode))
+    } else if ((opcode >= 0x0a && opcode <= 0x0d) || (opcode >= 0x0f && opcode <= 0x11) || opcode == 0x1d || opcode == 0x1e || opcode == 0x27 || opcode == 0x28) {
+      (1, readInstructionFormatAAop(opcode))
+    } else if (opcode == 0x29) {
+      (2, readInstructionFormat00op_AAAA(opcode))
+    } else if (opcode == 0x02 || opcode == 0x05 || opcode == 0x08 || opcode == 0x13 || opcode == 0x15 || opcode == 0x16 || opcode == 0x19 || opcode == 0x1a || opcode == 0x1c || opcode == 0x1f || opcode == 0x22 || (opcode >= 0x38 && opcode <= 0x3d) || (opcode >= 0x60 && opcode <= 0x6d)) {
+      (2, readInstructionFormatAAop_BBBB(opcode))
+    } else if ((opcode >= 0x2d && opcode <= 0x31) || (opcode >= 0x44 && opcode <= 0x51) || (opcode >= 0x90 && opcode <= 0xaf) || (opcode >= 0xd8 && opcode <= 0xe2)) {
+      (2, readInstructionFormatAAop_CCBB(opcode))
+    } else if (opcode == 0x20 || opcode == 0x23 || (opcode >= 0x32 && opcode <= 0x37) || (opcode >= 0x52 && opcode <= 0x5f) || (opcode >= 0xd0 && opcode <= 0xd7)) {
+      (2, readInstructionFormatBAop_CCCC(opcode))
+    } else if (opcode == 0x2a) {
+      (3, readInstructionFormat00op_AAAA_AAAA(opcode))
+    } else if (opcode == 0x03 || opcode == 0x06 || opcode == 0x09) {
+      (3, readInstructionFormat00op_AAAA_BBBB(opcode))
+    } else if (opcode == 0x14 || opcode == 0x17 || opcode == 0x1b || opcode == 0x26 || opcode == 0x2b || opcode == 0x2c) {
+      (3, readInstructionFormatAAop_BBBB_BBBB(opcode))
+    } else if (opcode == 0x24 || (opcode >= 0x6e && opcode <= 0x72)) {
+      (3, readInstructionFormatAGop_BBBB_FEDC(opcode))
+    } else if (opcode == 0x25 || (opcode >= 0x74 && opcode <= 0x78)) {
+      (3, readInstructionFormatAAop_BBBB_CCCC(opcode))
+    } else if (opcode == 0x18) {
+      (5, readInstructionFormatAAop_BBBB_BBBB_BBBB_BBBB(opcode))
+    } else {
+      throw new Exception("Encountered unhandled opcode: " + opcode.toInt.toHexString)
+    }
+  }
+
+  private def readInstructions(shortCount:Int, debugInfo:DebugInfo):SortedMap[Int,Instruction] = {
+    var insns = SortedMap.empty[Int,Instruction]
+    var shortOffset = 0
+    var debugTable = debugInfo.debugTable
+    while(shortOffset < shortCount) {
+      val (shortsRead, instruction) = readInstruction
+      if (debugTable isDefinedAt shortOffset.toLong)
+        instruction.sourceInfo = debugTable(shortOffset.toLong)
+      insns += shortOffset -> instruction
+      shortOffset += shortsRead
+    }
+    insns
+    // TODO: patch up instructions (possibly with TryItems and DebugInfo)
+  }
+
+  private def readTryItem():TryItem = {
+    val startAddr = reader.readUInt
+    val insnCount = reader.readUShort
+    val handlerOff = reader.readUShort
+    new TryItem(startAddr, insnCount, handlerOff)
+  }
+
+  private def readEncodedCatchHandlerList():Array[EncodedCatchHandler] = {
+    val startPos = reader.position
+    val size = reader.readUleb128
+    val list = new Array[EncodedCatchHandler](size.safeToInt)
+    for(i <- 0L until size) list(i.safeToInt) = readEncodedCatchHandler(reader.position - startPos)
+    list
+  }
+
+  private def readEncodedCatchHandler(offset:Int):EncodedCatchHandler = {
+    val size = reader.readSleb128
+    val isize = size.abs.safeToInt
+    val handlers = new Array[CatchHandler](isize)
+    for(i <- 0 until isize) {
+      val typeIdx = reader.readUleb128
+      val addr = reader.readUleb128
+      handlers(i) = new CatchHandler(
+        lookupType(typeIdx.safeToInt,
+                   ((t: JavaType) => handlers(i).exceptionType = t)),
+        addr)
+    }
+    new EncodedCatchHandler(offset, handlers, if (size <= 0) reader.readUleb128 else -1)
+  }
+
+  class UnrecognizedDebugCodeItemException(msg:String) extends Exception(msg)
+
+  private def maybeReadDebugInfo(off:Long, sourceFile:String, parameterTypes:Array[JavaType]):DebugInfo = {
+    if (0L == off) {
+      null
+    } else {
+      val pos = reader.position
+      reader.position(off)
+      val lineStart = reader.readUleb128
+      val parametersSize = reader.readUleb128
+      val parameterNames = new Array[String](parametersSize.safeToInt)
+      val debugCode = ArrayBuilder.make[DebugByteCode]
+      var varTable = Map.empty[Long, VarInfo]
+      var allVarTable = Map.empty[Long, VarInfo]
+      for (i <- 0 until parametersSize.safeToInt) {
+        val idx = reader.readUleb128p1
+        val name = if (idx.safeToInt == NO_INDEX) null else strings(idx.safeToInt)
+        parameterNames(i) = name
+        val varInfo = new VarInfo(i, name, parameterTypes(i), null)
+        varTable += i.toLong -> varInfo
+        allVarTable += i.toLong -> varInfo
+      }
+
+      var infoTable = Map.empty[Long, SourceInfo]
+      var opcode = reader.readUByte
+      var address = 0L
+      var fn = sourceFile
+      var line = lineStart
+      var prologue_end = false
+      var epilogue_begin = false
+
+      while(opcode != DBG_END_SEQUENCE) {
+        opcode match {
+          case DBG_ADVANCE_PC => address += reader.readUleb128
+          case DBG_ADVANCE_LINE => line += reader.readSleb128
+          case DBG_START_LOCAL => {
+            val registerNum = reader.readUleb128
+            val nameIdx = reader.readUleb128p1
+            val typeIdx = reader.readUleb128p1
+            val varInfo:VarInfo = new VarInfo(registerNum,
+                (if (nameIdx == NO_INDEX) null else strings(nameIdx.safeToInt)),
+                null, null)
+            if (typeIdx != NO_INDEX)
+               varInfo.varType = lookupType(typeIdx.safeToInt, ((t: JavaType) => varInfo.varType = t))
+            varTable += registerNum -> varInfo
+            allVarTable += registerNum -> varInfo
+          }
+          case DBG_START_LOCAL_EXTENDED => {
+            val registerNum = reader.readUleb128
+            val nameIdx = reader.readUleb128p1
+            val typeIdx = reader.readUleb128p1
+            val sigIdx = reader.readUleb128p1
+            val varInfo:VarInfo = new VarInfo(registerNum,
+                (if (nameIdx == NO_INDEX) null else strings(nameIdx.safeToInt)),
+                null, (if (sigIdx == NO_INDEX) null else strings(sigIdx.safeToInt)))
+            if (typeIdx != NO_INDEX)
+              varInfo.varType = lookupType(typeIdx.safeToInt, ((t: JavaType) => varInfo.varType = t))
+            varTable += registerNum -> varInfo
+            allVarTable += registerNum -> varInfo
+          }
+          case DBG_END_LOCAL => {
+            val registerNum = reader.readUleb128
+            varTable -= registerNum
+          }
+          case DBG_RESTART_LOCAL => {
+            val registerNum = reader.readUleb128
+            if (allVarTable isDefinedAt registerNum)
+              varTable += registerNum -> allVarTable(registerNum)
+          }
+          case DBG_SET_PROLOGUE_END => prologue_end = true
+          case DBG_SET_EPILOGUE_BEGIN => epilogue_begin = true
+          case DBG_SET_FILE => {
+            val idx = reader.readUleb128p1.safeToInt
+            fn = if (idx == NO_INDEX) null else strings(idx)
+          }
+          case _ => {
+            val adjusted_opcode = opcode - DBG_FIRST_SPECIAL
+            line += DBG_LINE_BASE + (adjusted_opcode % DBG_LINE_RANGE)
+            address += (adjusted_opcode / DBG_LINE_RANGE)
+            infoTable += address -> new SourceInfo(address, line, fn, varTable,
+                !prologue_end, epilogue_begin)
+            prologue_end = false
+            epilogue_begin = false
+          }
+        }
+        opcode = reader.readUByte
+      }
+      reader.position(pos)
+      new DebugInfo(lineStart,parameterNames,infoTable)
+    }
+  }
+
+  private var counter = 0
+
+  abstract class TryMark
+  case object TryStart extends TryMark
+  case object TryEnd extends TryMark
+  case class Catch(typeName:String) extends TryMark
+  case object CatchAll extends TryMark
+
+  private def typeNameToCanonical(typeName:String):String = {
+    if (typeName == "V") "void"
+    else if (typeName == "Z") "boolean"
+    else if (typeName == "B") "byte"
+    else if (typeName == "S") "short"
+    else if (typeName == "C") "char"
+    else if (typeName == "I") "int"
+    else if (typeName == "J") "long"
+    else if (typeName == "F") "float"
+    else if (typeName == "D") "double"
+    else if (typeName(0) == '[') "Array[" + typeNameToCanonical(typeName.substring(1)) + "]"
+    else if (typeName(0) == 'L') typeName.substring(1, typeName.length - 1).replace('/', '.')
+    else "unrecognized-type"
+  }
+
+  private def rangeToVarRef(A:Short, C:Int):String =
+    "{v" + (A.toInt to (A + C - 1)).mkString(", v") + "}"
+
+  private def maybeReadCodeItem(off:Long, sourceFile:String, parameterTypes:Array[JavaType], classType:JavaType, methodName:String):CodeItem = {
+    if (0 == off) {
+      null
+    } else {
+      counter += 1
+      val pos = reader.position
+      reader.position(off)
+      val registersSize = reader.readUShort
+      val insSize = reader.readUShort
+      val outsSize = reader.readUShort
+      val triesSize = reader.readUShort
+      val debugInfoOff = reader.readUInt
+      val debugInfo = maybeReadDebugInfo(debugInfoOff, sourceFile, parameterTypes)
+      val insnsSize = reader.readUInt.safeToInt
+      val insns = readInstructions(insnsSize, debugInfo)
+      if ((insnsSize % 2) == 1 && triesSize > 0) reader.readUShort
+      val tries = new Array[TryItem](triesSize)
+      for (i <- 0 until triesSize) tries(i) = readTryItem
+      val handlers = if (triesSize > 0) readEncodedCatchHandlerList else null
+      reader.position(pos)
+      var tryMap = SortedMap.empty[Long,TryMark]
+
+      var updatedInsnsMap = SortedMap.empty[Int,Instruction]
+      var idx = 0
+      var addrToIndex = Map.empty[Int,Int]
+      
+      for(t <- insns) {
+        t._2 match {
+          case TempPackedSwitch(a, b) => {
+            val address = t._1 + b
+            if (insns isDefinedAt address) {
+              insns(address) match {
+                case PackedSwitchPayload(firstKey, targets) => updatedInsnsMap += t._1 -> PackedSwitch(a, firstKey, targets)
+                case _ => throw new Exception("Expected to find packed-switch-payload at " + address + ", but instead found " + insns(address))
+              }
+            } else {
+              throw new Exception("Expected to find packed-switch-payload at " + address + ", but there is no instruction at this address")
+            }
+            addrToIndex += t._1 -> idx
+            idx += 1
+          }
+          case TempSparseSwitch(a, b) =>  {
+            val address = t._1 + b
+            if (insns isDefinedAt address) {
+              insns(address) match {
+                case SparseSwitchPayload(keys, targets) => updatedInsnsMap += t._1 -> SparseSwitch(a, keys, targets)
+                case _ => throw new Exception("Expected to find sparse-switch-payload at " + address + ", but instead found " + insns(address))
+              }
+            } else {
+              throw new Exception("Expected to find sparse-switch-payload at " + address + ", but there is no instruction at this address")
+            }
+            addrToIndex += t._1 -> idx
+            idx += 1
+          }
+          case TempFillArrayData(a, b) => {
+            val address = t._1 + b
+            if (insns isDefinedAt address) {
+              insns(address) match {
+                case FillArrayDataPayload(size, elementWidth, data) => updatedInsnsMap += t._1 -> FillArrayData(a, size, elementWidth, data)
+                case _ => throw new Exception("Expected to find file-array-data-payload at " + address + ", but instead found " + insns(address))
+              }
+            } else {
+              throw new Exception("Expected to find file-array-data-payload at " + address + ", but there is no instruction at this address")
+            }
+            addrToIndex += t._1 -> idx
+            idx += 1
+          }
+          case PackedSwitchPayload(firstKey, targets) => ()
+          case SparseSwitchPayload(keys, targets) => ()
+          case FillArrayDataPayload(size, elementWidth, data) => ()
+          case _ => { updatedInsnsMap += t._1 -> t._2; addrToIndex += t._1 -> idx; idx += 1 }
+        }
+      }
+
+      val finalInsns = new Array[Instruction](idx)
+      idx = 0
+
+      def patch(i:Int): Int =
+        if (addrToIndex isDefinedAt i)
+          addrToIndex(i)
+        else
+          throw new Exception("Expected to find patch address at " + i + ", but there is none")
+
+      for(t <- updatedInsnsMap) {
+        finalInsns(idx) = t._2 match {
+          case Goto(offset) => Goto(patch(t._1 + offset))
+          case Goto16(offset) => Goto16(patch(t._1 + offset))
+          case Goto32(offset) => Goto32(patch(t._1 + offset))
+          case IfEqz(a, offset) => IfEqz(a, patch(t._1 + offset))
+          case IfNez(a, offset) => IfNez(a, patch(t._1 + offset))
+          case IfLtz(a, offset) => IfLtz(a, patch(t._1 + offset))
+          case IfGez(a, offset) => IfGez(a, patch(t._1 + offset))
+          case IfGtz(a, offset) => IfGtz(a, patch(t._1 + offset))
+          case IfLez(a, offset) => IfLez(a, patch(t._1 + offset))
+          case IfEq(a, b, offset) => IfEq(a, b, patch(t._1 + offset))
+          case IfNe(a, b, offset) => IfNe(a, b, patch(t._1 + offset))
+          case IfLt(a, b, offset) => IfLt(a, b, patch(t._1 + offset))
+          case IfGe(a, b, offset) => IfGe(a, b, patch(t._1 + offset))
+          case IfGt(a, b, offset) => IfGt(a, b, patch(t._1 + offset))
+          case IfLe(a, b, offset) => IfLe(a, b, patch(t._1 + offset))
+          case PackedSwitch(a, firstKey, targets) => PackedSwitch(a, firstKey, targets.map((offset:Int) => patch(t._1 + offset)))
+          case SparseSwitch(a, keys, targets) => SparseSwitch(a, keys, targets.map((offset:Int) => patch(t._1 + offset)))
+          case _ => t._2
+        }
+      }
+
+      val finalTries = tries.map((t:TryItem) => {
+        handlers.find((ech:EncodedCatchHandler) => ech.offset == t.handlerOff) match {
+          case Some(ech) => {
+            val startAddr = patch(t.startAddr.safeToInt)
+            new Try(startAddr, startAddr + t.insnsCount,
+              ech.handlers.map((ch:CatchHandler) => {
+                new CatchHandler(ch.exceptionType, patch(ch.addr.safeToInt))
+              }), (if (ech.catchAllAddr == -1) -1 else patch(ech.catchAllAddr.safeToInt)))
+          }
+          case None => {
+            println("try addr: " + t.handlerOff)
+            for(ech <- handlers) println("encoded-catch-handler: " + ech.offset)
+            throw new Exception("Could not find matching catch handler")
+          }
+        }
+      })
+
+      new CodeItem(registersSize, insSize, outsSize, finalInsns, finalTries)
+    }
+  }
+
+  private def readEncodedMethods(size:Int, sourceFile:String):Array[EncodedMethod] = {
+    val methodArray = new Array[EncodedMethod](size)
+    var methodIdx = 0
+    for(i <- 0 until size) {
+      methodIdx += reader.readUleb128.safeToInt
+      val accessFlags = reader.readUleb128
+      val codeOff = reader.readUleb128
+      val method = methods(methodIdx)
+      val code = maybeReadCodeItem(codeOff, sourceFile, method.prototype.parameters, method.classType, method.name)
+      methodArray(i) = new EncodedMethod(method, accessFlags, code)
+    }
+    methodArray
+  }
+
+  private def maybeReadClassData(off:Long, sourceFile:String):ClassData = {
+    if (off == 0L) {
+      null
+    } else {
+      val pos = reader.position
+      reader.position(off)
+      val staticFieldsSize = reader.readUleb128.safeToInt
+      val instanceFieldsSize = reader.readUleb128.safeToInt
+      val directMethodsSize = reader.readUleb128.safeToInt
+      val virtualMethodsSize = reader.readUleb128.safeToInt
+      val staticFields = readEncodedFields(staticFieldsSize)
+      val instanceFields = readEncodedFields(instanceFieldsSize)
+      val directMethods = readEncodedMethods(directMethodsSize, sourceFile)
+      val virtualMethods = readEncodedMethods(virtualMethodsSize, sourceFile)
+      reader.position(pos)
+      new ClassData(staticFields, instanceFields, directMethods, virtualMethods)
+    }
+  }
+
+  case class EncodedValueException(msg:String) extends Exception(msg)
+
+  private def checkRangeInclusive(v:Int, min:Int, max:Int) = 
     if (v < min || v > max) throw new Exception(v + "is outside of " + min + " to " + max + " range")
 
-  def readEncodedInt(signed:Boolean,size:Int,numBytes:Int):Long = {
+  private def readEncodedInt(signed:Boolean, size:Int, numBytes:Int):Long = {
     var n = 0L
-    if (!signed && size == 8) throw new Exception("Unsigned Long out of Long range")
-    for(i <- 0 until numBytes) n |= (readUByte << i)
+    if (!signed && size == 8) throw new OutOfRange("Unsigned Long out of Long range")
+    for(i <- 0 until numBytes) n |= (reader.readUByte << i)
     n << (8 - numBytes) * 8
     if (signed) n >> (8 - numBytes) * 8 else n >>> (8 - numBytes)
   }
 
   def readEncodedFloat(numBytes:Int):Float = {
+    // convert dex code's compressed float representation into
+    // a full 4 byte float and then read it from the buffer
     val bb = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-    for(i <- 0 until numBytes) bb.put(readByte)
+    for(i <- 0 until numBytes) bb.put(reader.readByte)
     bb.rewind
     bb.getFloat
   }
 
   def readEncodedDouble(numBytes:Int):Double = {
+    // convert dex code's compressed double representation into
+    // a full 4 byte float and then read it from the buffer
     val bb = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
-    for(i <- 0 until numBytes) bb.put(readByte)
+    for(i <- 0 until numBytes) bb.put(reader.readByte)
     bb.rewind
     bb.getDouble
   }
 
   def readEncodedArray():Array[EncodedValue] = {
-    val size = readUleb128
-    val vals = new Array[EncodedValue](size.safeToInt)
-    for(i <- 0 until size.safeToInt) vals(i) = readEncodedValue
+    val size = reader.readUleb128.safeToInt
+    val vals = new Array[EncodedValue](size)
+    for(i <- 0 until size) vals(i) = readEncodedValue
     vals
   }
 
   def readEncodedAnnotation():EncodedAnnotation = {
-    val typeIdx = readUleb128
-    val size = readUleb128
-    val annotations = new Array[(Long,EncodedValue)](size.safeToInt)
-    for(i <- 0 until size.safeToInt) {
-      val nameIdx = readUleb128
+    val typeIdx = reader.readUleb128
+    val size = reader.readUleb128.safeToInt
+    val annotations = new Array[AnnotationElement](size)
+    for(i <- 0 until size) {
+      val nameIdx = reader.readUleb128
       val v = readEncodedValue
-      annotations(i) = (nameIdx, v)
+      annotations(i) = new AnnotationElement(strings(nameIdx.safeToInt), v)
     }
-    new EncodedAnnotation(typeIdx, annotations)
+    val ea = new EncodedAnnotation(null, annotations)
+    ea.javaType = lookupType(typeIdx.safeToInt, ((t: JavaType) => ea.javaType = t))
+    ea
   }
 
-  class EncodedValueException(msg:String) extends Exception
-
-  def readEncodedValue():EncodedValue = {
-    val valTypeArg = readUByte
+  private def readEncodedValue():EncodedValue = {
+    val valTypeArg = reader.readUByte
     val valArg = ((valTypeArg & 0xe0) >>> 5) + 1
     (valTypeArg & 0x1f) match {
       case VALUE_BYTE => checkRangeInclusive(valArg,1,1); new EncodedByte(readByte)
@@ -547,11 +1235,16 @@ class DexReader(ch:ReadableByteChannel) {
       case VALUE_LONG => checkRangeInclusive(valArg,1,8); new EncodedLong(readEncodedInt(true,8,valArg))
       case VALUE_FLOAT => checkRangeInclusive(valArg,1,4); new EncodedFloat(readEncodedFloat(valArg))
       case VALUE_DOUBLE => checkRangeInclusive(valArg,1,8); new EncodedDouble(readEncodedDouble(valArg))
-      case VALUE_STRING => checkRangeInclusive(valArg,1,4); new EncodedString(readEncodedInt(false,4,valArg))
-      case VALUE_TYPE => checkRangeInclusive(valArg,1,4); new EncodedType(readEncodedInt(false,4,valArg))
-      case VALUE_FIELD => checkRangeInclusive(valArg,1,4); new EncodedFieldVal(readEncodedInt(false,4,valArg))
-      case VALUE_METHOD => checkRangeInclusive(valArg,1,4); new EncodedMethodVal(readEncodedInt(false,4,valArg))
-      case VALUE_ENUM => checkRangeInclusive(valArg,1,4); new EncodedEnum(readEncodedInt(false,4,valArg))
+      case VALUE_STRING => checkRangeInclusive(valArg,1,4); new EncodedString(strings(readEncodedInt(false,4,valArg).safeToInt))
+      case VALUE_TYPE => {
+        checkRangeInclusive(valArg,1,4)
+        val et = new EncodedType(null)
+        et.t = lookupType(readEncodedInt(false,4,valArg).safeToInt, ((t: JavaType) => et.t = t))
+        et
+      }
+      case VALUE_FIELD => checkRangeInclusive(valArg,1,4); new EncodedFieldVal(fields(readEncodedInt(false,4,valArg).safeToInt))
+      case VALUE_METHOD => checkRangeInclusive(valArg,1,4); new EncodedMethodVal(methods(readEncodedInt(false,4,valArg).safeToInt))
+      case VALUE_ENUM => checkRangeInclusive(valArg,1,4); new EncodedEnum(fields(readEncodedInt(false,4,valArg).safeToInt))
       case VALUE_ARRAY => checkRangeInclusive(valArg,1,1); new EncodedArray(readEncodedArray)
       case VALUE_ANNOTATION => checkRangeInclusive(valArg,1,1); readEncodedAnnotation
       case VALUE_NULL => checkRangeInclusive(valArg,1,1); EncodedNull
@@ -560,212 +1253,62 @@ class DexReader(ch:ReadableByteChannel) {
     }
   }
 
-  def readStaticValues(cd:ClassDef) {
-    cd.staticValues = readEncodedArray
-  }
-
-  def readMapList() {
-    val size = readUInt
-    val mapItems = new Array[(Int,Long,Long)](size.safeToInt)
-    for(i <- 0L until size) {
-      val itemType = readUShort
-      val unused = readUShort
-      val size = readUInt
-      val offset = readUInt
-      mapItems(i.safeToInt) = (itemType, size, offset)
+  private def maybeReadStaticValues(off:Long):Array[EncodedValue] = {
+    if (0L == off) {
+      null
+    } else {
+      val pos = reader.position
+      reader.position(off)
+      val staticValues = readEncodedArray
+      reader.position(pos)
+      staticValues
     }
   }
 
-  def readAnnotationSet():AnnotationSet = {
-    val size = readUInt
-    val as = new AnnotationSet(size.safeToInt)
-    for(i <- 0L until size) dataMap += readUInt -> AnnotationItem(as,i)
-    as
-  }
+  private def readClassDefs() {
+    val classDefsSize = header(ClassDefsSize.id).safeToInt
+    classDefs = new Array[ClassDef](classDefsSize)
+    reader.checkPosition(header(ClassDefsOffset.id))
+    for(i <- 0 until classDefsSize) {
+      val classIdx = reader.readUInt
+      val accessFlags = reader.readUInt
+      val superClassIdx = reader.readUInt
+      val interfacesOff = reader.readUInt
+      val sourceFileIdx = reader.readUInt
+      val sourceFile = if (sourceFileIdx == NO_INDEX) null else strings(sourceFileIdx.safeToInt)
+      val annotationsOff = reader.readUInt
+      val classDataOff = reader.readUInt
+      val staticValuesOff = reader.readUInt
 
-  def readClassAnnotation(ad:AnnotationsDirectoryItem) {
-    ad.classAnnotations = readAnnotationSet
-  }
- 
-  def readFieldAnnotation(fa:FieldAnnotation) {
-    fa.annotationSet = readAnnotationSet
-  }
-
-  def readMethodAnnotation(ma:MethodAnnotation) {
-    ma.annotationSet = readAnnotationSet
-  }
-
-  def readParameterAnnotation(asrl:AnnotationSetRefList, i:Long) {
-    asrl(i.safeToInt) = readAnnotationSet
-  }
-
-  def readParameterAnnotationSet(pa:ParameterAnnotation) {
-    val size = readUInt
-    val asrl = new AnnotationSetRefList(size.safeToInt)
-    for(i <- 0L until size) dataMap += readUInt -> ParameterAnnotationSetItem(asrl,i)
-  }
-
-  def readAnnotation(as:AnnotationSet, i:Long) {
-    val visibility = readUByte
-    val annotation = readEncodedAnnotation
-    as(i.safeToInt) = new Annotation(visibility, annotation)
-  }
-
-  def readCodeItem(em:EncodedMethod) {
-    val registersSize = readUShort
-    val insSize = readUShort
-    val outsSize = readUShort
-    val triesSize = readUShort
-    val debugInfoOff = readUInt
-    val insnsSize = readUInt
-    val insns = new Array[Int](insnsSize.safeToInt)
-    for (i <- 0L until insnsSize) insns(i.safeToInt) = readUShort
-    if ((insnsSize % 2) == 1 && triesSize > 0) readUShort
-    val tries = new Array[TryItem](triesSize)
-    for (i <- 0 until triesSize) tries(i) = readTryItem
-    val handlers = if (triesSize > 0) readEncodedCatchHandlerList else null
-    em.code = new CodeItem(registersSize, insSize, outsSize, insns, tries, handlers)
-    if (debugInfoOff != 0) dataMap += debugInfoOff -> DebugInfoItem(em.code)
-  }
-
-  def readTryItem():TryItem = {
-    val startAddr = readUInt
-    val insnCount = readUShort
-    val handlerOff = readUShort
-    new TryItem(startAddr, insnCount, handlerOff)
-  }
-
-  def readEncodedCatchHandlerList() = {
-    val size = readUleb128
-    val list = new Array[EncodedCatchHandler](size.safeToInt)
-    for(i <- 0L until size) list(i.safeToInt) = readEncodedCatchHandler
-    list
-  }
-
-  def readEncodedCatchHandler():EncodedCatchHandler = {
-    val size = readSleb128
-    val isize = size.abs.safeToInt
-    val handlers = new Array[(Long,Long)](isize)
-    for(i <- 0 until isize) {
-      val typeIdx = readUleb128
-      val addr = readUleb128
-      handlers(i) = (typeIdx, addr)
-    }
-    new EncodedCatchHandler(handlers, if (size < 0) readUleb128 else -1)
-  }
-
-  class UnrecognizedDebugCodeItemException(msg:String) extends Exception
-
-  def readDebugInfo(ci:CodeItem) {
-    val lineStart = readUleb128
-    val parametersSize = readUleb128
-    val parameterNames = new Array[Long](parametersSize.safeToInt)
-    val debugCode = ArrayBuilder.make[DebugByteCode]
-    for (i <- 0L until parametersSize) parameterNames(i.safeToInt) = readUleb128p1
-    var lastCodeItem = readUByte
-    
-
-    while(lastCodeItem != DBG_END_SEQUENCE) {
-      debugCode += (lastCodeItem match {
-        case DBG_ADVANCE_PC => DebugAdvancePC(readUleb128)
-        case DBG_ADVANCE_LINE => DebugAdvanceLine(readSleb128)
-        case DBG_START_LOCAL => {
-          val registerNum = readUleb128
-          val nameIdx = readUleb128p1
-          val typeIdx = readUleb128p1
-          DebugStartLocal(registerNum,nameIdx,typeIdx)
-        }
-        case DBG_START_LOCAL_EXTENDED => {
-          val registerNum = readUleb128
-          val nameIdx = readUleb128p1
-          val typeIdx = readUleb128p1
-          val sigIdx = readUleb128p1
-          DebugStartLocalExtended(registerNum,nameIdx,typeIdx,sigIdx)
-        }
-        case DBG_END_LOCAL => DebugEndLocal(readUleb128)
-        case DBG_RESTART_LOCAL => DebugRestartLocal(readUleb128)
-        case DBG_SET_PROLOGUE_END => DebugSetPrologueEnd
-        case DBG_SET_EPILOGUE_BEGIN => DebugSetEpilogueBegin
-        case DBG_SET_FILE => DebugSetFile(readUleb128p1)
-        case _ => {
-          if (lastCodeItem >= 0x0a && lastCodeItem <= 0xff)
-            DebugSpecial(lastCodeItem)
-          else
-            throw new UnrecognizedDebugCodeItemException(lastCodeItem + " is not a recognized debugging bytecode")
-        }
-      })
-      lastCodeItem = readUByte
-    }
-    ci.debugInfo = new DebugInfo(lineStart,parameterNames,debugCode.result)
-  }
-
-  def readData() {
-    val readPositions = new ArrayBuffer[Long]
-    while(!dataMap.isEmpty) {
-      val (nextPosition,elem) = dataMap.head
-      dataMap = dataMap.tail
-      val tmpChannelOffset = channelOffset
-      val tmpBufferEmptyTail = bufferEmptyTail
-      if (nextPosition > position)
-        unknownDataBuffer += (position -> readIntoBuffer(nextPosition-position))
-      if (nextPosition < position) {
-        val (offset, tmpBuffer) = findTmpBuffer(nextPosition.safeToInt)
-        readingFromMainBuffer = false
-        channelOffset = offset + tmpBuffer.capacity
-        currBuffer = tmpBuffer
-        bufferEmptyTail = 0
-      } 
-
-      elem match {
-        case StringItem(idx) => readString(idx)
-        case ProtoItem(idx,shortyIdx,returnTypeIdx) => readProtoParameters(idx,shortyIdx,returnTypeIdx)
-        case ClassDefInterfacesItem(cd) => readInterfaces(cd)
-        case ClassDefAnnotationsItem(cd) => readAnnotationsDirectory(cd)
-        case ClassDefClassDataItem(cd) => readClassData(cd)
-        case ClassDefStaticValuesItem(cd) => readStaticValues(cd)
-        case MapList => readMapList
-        case ClassAnnotationSetItem(ad) => readClassAnnotation(ad)
-        case FieldAnnotationSetItem(fa) => readFieldAnnotation(fa)
-        case MethodAnnotationSetItem(ma) => readMethodAnnotation(ma)
-        case ParameterAnnotationSetItem(asrl,i) => readParameterAnnotation(asrl,i)
-        case ParameterAnnotationSetRefItem(pa) => readParameterAnnotationSet(pa)
-        case AnnotationItem(as,i) => readAnnotation(as, i)
-        case EncodedMethodCodeItem(em) => readCodeItem(em)
-        case DebugInfoItem(ci) => readDebugInfo(ci)
-      }
-
-      if (!readingFromMainBuffer) {
-        channelOffset = tmpChannelOffset
-        currBuffer = buffer
-        bufferEmptyTail = tmpBufferEmptyTail
-        readingFromMainBuffer = true
-      }
+      val interfaces = maybeReadTypeList(interfacesOff)
+      val annotations = maybeReadAnnotationsDirectoryItem(annotationsOff)
+      val classData = maybeReadClassData(classDataOff, sourceFile)
+      val staticValues = maybeReadStaticValues(staticValuesOff)
+      val className = types(classIdx.safeToInt)
+      val classDef:ClassDef = new ClassDef(className, accessFlags, null,
+          interfaces, sourceFile, annotations, classData, staticValues)
+      if (superClassIdx != NO_INDEX)
+        classDef.superClass = lookupType(superClassIdx.safeToInt,
+            ((t: JavaType) => classDef.superClass = t))
+      typeMap += className -> classDef
+      classDefs(i) = classDef
     }
   }
 
   def readFile() {
     readHeader
-    dataMap += header(HeaderField.mapOffset.id) -> MapList
-    strings = new Array[String](header(HeaderField.stringIdsSize.id).safeToInt)
-    types = new Array[Long](header(HeaderField.typeIdsSize.id).safeToInt)
-    protos = new Array[(Long,Long,Array[Int])](header(HeaderField.protoIdsSize.id).safeToInt)
-    fields = new Array[(Int,Int,Long)](header(HeaderField.fieldIdsSize.id).safeToInt)
-    methods = new Array[(Int,Int,Long)](header(HeaderField.methodIdsSize.id).safeToInt)
-    classDefs = new Array[ClassDef](header(HeaderField.classDefsSize.id).safeToInt)
-    readSome(readStringId, header(HeaderField.stringIdsOffset.id), header(HeaderField.stringIdsSize.id))
-    readSome(readTypeId, header(HeaderField.typeIdsOffset.id), header(HeaderField.typeIdsSize.id))
-    readSome(readProtoId, header(HeaderField.protoIdsOffset.id), header(HeaderField.protoIdsSize.id))
-    readSome(readFieldId, header(HeaderField.fieldIdsOffset.id), header(HeaderField.fieldIdsSize.id))
-    readSome(readMethodId, header(HeaderField.methodIdsOffset.id), header(HeaderField.methodIdsSize.id))
-    readSome(readClassDef, header(HeaderField.classDefsOffset.id), header(HeaderField.classDefsSize.id))
-    readData
+    readStrings
+    readTypes
+    readPrototypes
+    readFields
+    readMethods
+    readClassDefs
+    for (t <- typeCallbacks) t._2(lookupType(t._1))
+    classDefs
   }
 
-  def printParts(printAll:Boolean = false) {
-    println("checksum: " + checksum)
-    println("signature: " + signature.mkString(", "))
-    println("header: " + header.mkString(", "))
-    if (printAll) println("dataMap: " + dataMap.mkString(", "))
-  }
+  def getClassDefs():Array[ClassDef] = classDefs
+  def getStrings():Array[String] = strings
+  def getTypes():Array[String] = types
+  def printPrototypes() = prototypes.foreach((x:Prototype) => println(x.shortDescriptor + " " + x.returnType + " " + (if (x.parameters == null) "none" else x.parameters.mkString(", "))))
 }
-

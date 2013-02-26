@@ -5,3 +5,5 @@ bin
 *.aux
 *.log
 *.pdf
+.*.sw?
+.sw?
