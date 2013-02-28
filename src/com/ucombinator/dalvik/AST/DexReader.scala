@@ -905,7 +905,6 @@ class DexReader(ch:FileChannel) {
       val lineStart = reader.readUleb128
       val parametersSize = reader.readUleb128
       val parameterNames = new Array[String](parametersSize.safeToInt)
-      val debugCode = ArrayBuilder.make[DebugByteCode]
       var varTable = Map.empty[Long, VarInfo]
       var allVarTable = Map.empty[Long, VarInfo]
       for (i <- 0 until parametersSize.safeToInt) {

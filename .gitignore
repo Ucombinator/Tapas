@@ -7,3 +7,4 @@ bin
 *.pdf
 .*.sw?
 .sw?
+target
