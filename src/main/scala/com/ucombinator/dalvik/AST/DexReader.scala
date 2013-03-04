@@ -2,7 +2,7 @@ package com.ucombinator.dalvik.AST
 
 import collection.SortedMap
 import collection.mutable.ArrayBuilder
-import java.io.{FileInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream, ByteArrayInputStream, StreamCorruptedException}
+import java.io.{File, FileInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream, ByteArrayInputStream, StreamCorruptedException}
 import java.nio.{ByteOrder, ByteBuffer}
 import java.nio.channels.FileChannel
 import java.nio.channels.FileChannel.MapMode._
@@ -12,6 +12,7 @@ class DexReader(ch:FileChannel) {
 
   def this(is:FileInputStream) = this(is.getChannel)
   def this(fn:String) = this(new FileInputStream(fn))
+  def this(f:File) = this(new FileInputStream(f))
 
   private class LowLevelReaderHelper(ch:FileChannel) {
     private val buffer = ch.map(READ_ONLY, 0, ch.size).order(ByteOrder.LITTLE_ENDIAN)
@@ -1294,7 +1295,7 @@ class DexReader(ch:FileChannel) {
     }
   }
 
-  def readFile() {
+  def readFile():Array[ClassDef] = {
     readHeader
     readStrings
     readTypes
