@@ -994,24 +994,6 @@ class DexReader(ch:FileChannel) {
   case class Catch(typeName:String) extends TryMark
   case object CatchAll extends TryMark
 
-  private def typeNameToCanonical(typeName:String):String = {
-    if (typeName == "V") "void"
-    else if (typeName == "Z") "boolean"
-    else if (typeName == "B") "byte"
-    else if (typeName == "S") "short"
-    else if (typeName == "C") "char"
-    else if (typeName == "I") "int"
-    else if (typeName == "J") "long"
-    else if (typeName == "F") "float"
-    else if (typeName == "D") "double"
-    else if (typeName(0) == '[') "Array[" + typeNameToCanonical(typeName.substring(1)) + "]"
-    else if (typeName(0) == 'L') typeName.substring(1, typeName.length - 1).replace('/', '.')
-    else "unrecognized-type"
-  }
-
-  private def rangeToVarRef(A:Short, C:Int):String =
-    "{v" + (A.toInt to (A + C - 1)).mkString(", v") + "}"
-
   private def maybeReadCodeItem(off:Long, sourceFile:String, parameterTypes:Array[JavaType], classType:JavaType, methodName:String):CodeItem = {
     if (0 == off) {
       null
@@ -1116,6 +1098,7 @@ class DexReader(ch:FileChannel) {
           case SparseSwitch(a, keys, targets) => SparseSwitch(a, keys, targets.map((offset:Int) => patch(t._1 + offset)))
           case _ => t._2
         }
+        idx += 1
       }
 
       val finalTries = tries.map((t:TryItem) => {
