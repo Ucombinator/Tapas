@@ -379,12 +379,34 @@ class DexReader(ch:FileChannel) {
     }
   }
 
-  private def readEncodedFields(size:Int):Array[EncodedField] = {
-    val fieldArray = new Array[EncodedField](size)
+  private def readEncodedFields(size: Int, staticValues: Array[EncodedValue]): Array[FieldDef] = {
+    val fieldArray = new Array[FieldDef](size)
     var fieldIdx = 0
+    def getStaticValue(i: Int, t: JavaType, accessFlags: Long): EncodedValue = {
+      if ((accessFlags & AccessFlags.ACC_STATIC) == 0) {
+        null
+      } else if (staticValues != null && staticValues.isDefinedAt(i)) {
+        staticValues(i)
+      } else {
+        t match {
+          case BooleanType => EncodedBoolean(false)
+          case ByteType    => EncodedByte(0.toByte)
+          case ShortType   => EncodedShort(0.toShort) 
+          case CharType    => EncodedChar(0.toChar)
+          case IntType     => EncodedInt(0)
+          case LongType    => EncodedLong(0L)
+          case FloatType   => EncodedFloat(0.0.toFloat)
+          case DoubleType  => EncodedDouble(0.0)
+          case _           => EncodedNull
+        }
+      }
+    }
     for(i <- 0 until size) {
       fieldIdx += reader.readUleb128.safeToInt
-      fieldArray(i) = new EncodedField(fields(fieldIdx), reader.readUleb128)
+      val accessFlags = reader.readUleb128
+      val field = fields(fieldIdx)
+      val staticVal = getStaticValue(i, field.fieldType, accessFlags)
+      fieldArray(i) = new FieldDef(field, accessFlags, staticVal)
     }
     fieldArray
   }
@@ -1122,8 +1144,8 @@ class DexReader(ch:FileChannel) {
     }
   }
 
-  private def readEncodedMethods(size:Int, sourceFile:String):Array[EncodedMethod] = {
-    val methodArray = new Array[EncodedMethod](size)
+  private def readEncodedMethods(size:Int, sourceFile:String):Array[MethodDef] = {
+    val methodArray = new Array[MethodDef](size)
     var methodIdx = 0
     for(i <- 0 until size) {
       methodIdx += reader.readUleb128.safeToInt
@@ -1131,14 +1153,16 @@ class DexReader(ch:FileChannel) {
       val codeOff = reader.readUleb128
       val method = methods(methodIdx)
       val code = maybeReadCodeItem(codeOff, sourceFile, method.prototype.parameters, method.classType, method.name)
-      methodArray(i) = new EncodedMethod(method, accessFlags, code)
+      methodArray(i) = new MethodDef(method, accessFlags, code)
     }
     methodArray
   }
 
-  private def maybeReadClassData(off:Long, sourceFile:String):ClassData = {
+  private def maybeReadClassData(off: Long, sourceFile: String,
+                                 staticValues: Array[EncodedValue]):
+    (Array[FieldDef], Array[FieldDef], Array[MethodDef], Array[MethodDef]) = {
     if (off == 0L) {
-      null
+      (null, null, null, null)
     } else {
       val pos = reader.position
       reader.position(off)
@@ -1146,12 +1170,12 @@ class DexReader(ch:FileChannel) {
       val instanceFieldsSize = reader.readUleb128.safeToInt
       val directMethodsSize = reader.readUleb128.safeToInt
       val virtualMethodsSize = reader.readUleb128.safeToInt
-      val staticFields = readEncodedFields(staticFieldsSize)
-      val instanceFields = readEncodedFields(instanceFieldsSize)
+      val staticFields = readEncodedFields(staticFieldsSize, staticValues)
+      val instanceFields = readEncodedFields(instanceFieldsSize, null)
       val directMethods = readEncodedMethods(directMethodsSize, sourceFile)
       val virtualMethods = readEncodedMethods(virtualMethodsSize, sourceFile)
       reader.position(pos)
-      new ClassData(staticFields, instanceFields, directMethods, virtualMethods)
+      (staticFields, instanceFields, directMethods, virtualMethods)
     }
   }
 
@@ -1265,11 +1289,13 @@ class DexReader(ch:FileChannel) {
 
       val interfaces = maybeReadTypeList(interfacesOff)
       val annotations = maybeReadAnnotationsDirectoryItem(annotationsOff)
-      val classData = maybeReadClassData(classDataOff, sourceFile)
       val staticValues = maybeReadStaticValues(staticValuesOff)
+      val (staticFields, instanceFields, directMethods, virtualMethods) =
+          maybeReadClassData(classDataOff, sourceFile, staticValues)
       val className = types(classIdx.safeToInt)
-      val classDef:ClassDef = new ClassDef(className, accessFlags, null,
-          interfaces, sourceFile, annotations, classData, staticValues)
+      val classDef = new ClassDef(className, accessFlags, null,
+          interfaces, sourceFile, annotations, staticFields, instanceFields,
+          directMethods, virtualMethods)
       if (superClassIdx != NO_INDEX)
         classDef.superClass = lookupType(superClassIdx.safeToInt,
             ((t: JavaType) => classDef.superClass = t))

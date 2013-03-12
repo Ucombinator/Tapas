@@ -2,6 +2,16 @@ package com.ucombinator.dalvik.AST
 
 // http://www.milk.com/kodebase/dalvik-docs-mirror/docs/dalvik-bytecode.html
 
+class VarInfo(val registerNum: Long, val name: String, var varType: JavaType,
+  val signature: String)
+
+class SourceInfo(val position: Long, val line: Long, val fn: String,
+  val varTable: Map[Long,VarInfo], val inPrologue: Boolean,
+  val inEpilogue: Boolean)
+
+class DebugInfo(val lineStart: Long, val parameterNames: Array[String],
+  val debugTable: Map[Long,SourceInfo])
+
 abstract class Instruction {
   var next: Instruction = null
   var sourceInfo: SourceInfo = null

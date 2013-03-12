@@ -34,26 +34,39 @@ class AbstractType(val nameOf: String) extends JavaType
 //}
 
 // TODO: sync-up this ClassDef with the older (existing) ClassDef
-class ClassDef(val className:String, val accessFlags:Long, var superClass:JavaType,
-  val interfaces:Array[JavaType], val sourceFile:String, val annotations:AnnotationsDirectoryItem,
-  val classData:ClassData, val staticValues:Array[EncodedValue]) extends JavaType
+class ClassDef(val name: String, val accessFlags: Long, var superClass: JavaType,
+  val interfaces: Array[JavaType], val sourceFile: String,
+  val annotations: AnnotationsDirectoryItem, val staticFields: Array[FieldDef],
+  val instanceFields: Array[FieldDef], val directMethods: Array[MethodDef],
+  val virtualMethods: Array[MethodDef])
+  extends JavaType {
 
-class CodeItem(val registersSize:Int, val insSize:Int, val outsSize:Int,
-  val insns:Array[Instruction], val tries:Array[Try])
+  val visibility = if ((accessFlags & AccessFlags.ACC_PUBLIC) != 0) PublicVisibilityAttr
+                   else if ((accessFlags & AccessFlags.ACC_PRIVATE) != 0) PrivateVisibilityAttr
+                   else if ((accessFlags & AccessFlags.ACC_PROTECTED) != 0) ProtectedVisibilityAttr
+                   else null
 
-class TryItem(val startAddr:Long, val insnsCount:Int, val handlerOff:Int)
-class Try(val startAddr:Int, val endAddr:Int, handlers:Array[CatchHandler], val catchAllAddr:Int)
+  val isStatic = ((accessFlags & AccessFlags.ACC_STATIC) != 0)
 
-class CatchHandler(var exceptionType:JavaType, val addr:Long)
-class EncodedCatchHandler(val offset:Int, val handlers:Array[CatchHandler], val catchAllAddr:Long)
- 
-class EncodedField(val field:Field, val accessFlags:Long)
-class EncodedMethod(val method:Method, val accessFlags:Long, val code:CodeItem)
+  val isFinal = ((accessFlags & AccessFlags.ACC_FINAL) != 0)
 
-class ClassData(val staticFields:Array[EncodedField],
-  val instanceFields:Array[EncodedField],
-  val directMethods:Array[EncodedMethod],
-  val virtualMethods:Array[EncodedMethod])
+  val isInterface = ((accessFlags & AccessFlags.ACC_INTERFACE) != 0)
+
+  val isAbstract = ((accessFlags & AccessFlags.ACC_ABSTRACT) != 0)
+
+  val isSynthetic = ((accessFlags & AccessFlags.ACC_SYNTHETIC) != 0)
+
+  val isAnnotation = ((accessFlags & AccessFlags.ACC_ANNOTATION) != 0)
+
+  val isEnum = ((accessFlags & AccessFlags.ACC_ENUM) != 0)
+
+  lazy val fields = staticFields ++ instanceFields
+
+  lazy val methods = directMethods ++ virtualMethods
+
+  lazy val methodMap = methods.foldLeft(Map.empty[String,MethodDef])((map, meth) => map + (meth.name -> meth))
+  
+}
 
 class AnnotationItem(val visibility:Short, val annotation:EncodedAnnotation)
 
@@ -62,7 +75,6 @@ class AnnotationItem(val visibility:Short, val annotation:EncodedAnnotation)
 //  type AnnotationSetRefList = Array[AnnotationSetItem]
 // but that seems to make scalac unhappy when these are at the top level, so I have simply
 // specified these out fully or as I might think of it in scheme---I macro expanded.
-
 
 class FieldAnnotation(val field:Field, val annotations:Array[AnnotationItem])
 class MethodAnnotation(val method:Method, val annotations:Array[AnnotationItem])
@@ -92,19 +104,4 @@ case class EncodedAnnotation(var javaType:JavaType, elements:Array[AnnotationEle
 case object EncodedNull extends EncodedValue
 case class EncodedBoolean(b:Boolean) extends EncodedValue
 class AnnotationElement(val name:String, val value:EncodedValue)
-
-class VarInfo(val registerNum:Long, val name:String, var varType:JavaType, val signature:String) {
-  override def toString():String = {
-    "{VarInfo " + registerNum + " " + name + " " + varType + 
-      (if (signature == null) " " + signature else "") + "}"
-  }
-}
-class SourceInfo(val position:Long, val line:Long, val fn:String, val varTable:Map[Long,VarInfo], val inPrologue:Boolean, val inEpilogue:Boolean) {
-  override def toString():String = {
-     "{SourceInfo " + position + " " + line + " " + fn + " {" + varTable.mkString(", ") + "} " + inPrologue + " " + inEpilogue + "}"
-  }
-}
-
-class DebugInfo(val lineStart:Long, val parameterNames:Array[String],
-  val debugTable:Map[Long,SourceInfo])
 

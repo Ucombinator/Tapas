@@ -44,14 +44,14 @@ object Analyzer extends App {
       case DoubleType => "double"
       case at: AbstractType => canonicalClassName(at.nameOf)
       case ar: ArrayType => "Array[" + javaTypeToName(ar.typeOf) + "]"
-      case cd: ClassDef => canonicalClassName(cd.className)
+      case cd: ClassDef => canonicalClassName(cd.name)
       case _ => throw new Exception("Unrecognized JavaType: " + t)
     }
   }
 
   private def javaTypeToClassName(t: JavaType): String = {
     t match {
-      case cd: ClassDef => cd.className
+      case cd: ClassDef => cd.name
       case at: AbstractType => at.nameOf
       case _ => throw new Exception("JavaType does not have classname: " + t)
     }
@@ -63,7 +63,7 @@ object Analyzer extends App {
   private def javaTypeToCanonicalClassName(t: JavaType): String =
     canonicalClassName(javaTypeToClassName(t))
 
-  private def printFields(fieldType: String, fields: Array[EncodedField]): Unit = {
+  private def printFields(fieldType: String, fields: Array[FieldDef]): Unit = {
     if (fields != null && fields.length > 0) {
       println("  " + fieldType + " fields:")
       for(f <- fields) {
@@ -73,7 +73,7 @@ object Analyzer extends App {
     }
   }
 
-  private def printMethods(methodType: String, methods: Array[EncodedMethod]): Unit = {
+  private def printMethods(methodType: String, methods: Array[MethodDef]): Unit = {
     if (methods != null && methods.length > 0) {
       println("  " + methodType + " methods:")
       for(m <- methods) {
@@ -336,20 +336,17 @@ object Analyzer extends App {
 
   private def dumpClassDefs(classDefs: Array[ClassDef]): Unit = {
     for (cd <- classDefs) {
-      print("class: " + canonicalClassName(cd.className))
+      print("class: " + canonicalClassName(cd.name))
       val superName = javaTypeToClassName(cd.superClass)
       if (superName != "Ljava/lang/Object;")
         print(" (super: " + canonicalClassName(superName) + ")")
       println
       if (cd.interfaces != null)
         println("  interfaces: " + (cd.interfaces map javaTypeToCanonicalClassName).mkString(", "))
-      if (cd.classData != null) {
-        val data = cd.classData
-        printFields("static", data.staticFields)
-        printFields("instance", data.instanceFields)
-        printMethods("virtual", data.virtualMethods)
-        printMethods("direct", data.directMethods)
-      }
+      printFields("static", cd.staticFields)
+      printFields("instance", cd.instanceFields)
+      printMethods("virtual", cd.virtualMethods)
+      printMethods("direct", cd.directMethods)
     }
   }
 
