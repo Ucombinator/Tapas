@@ -85,23 +85,3 @@ class AnnotationsDirectoryItem(val classAnnotations:Array[AnnotationItem],
   val methodAnnotations:Array[MethodAnnotation],
   val parameterAnnotations:Array[ParameterAnnotation])
 
-/* classes to represent encoded values--probably should unencode for AST */
-sealed abstract class EncodedValue
-case class EncodedByte(b:Byte) extends EncodedValue
-case class EncodedShort(s:Short) extends EncodedValue
-case class EncodedChar(c:Char) extends EncodedValue
-case class EncodedInt(i:Int) extends EncodedValue
-case class EncodedLong(l:Long) extends EncodedValue
-case class EncodedFloat(f:Float) extends EncodedValue
-case class EncodedDouble(d:Double) extends EncodedValue
-case class EncodedString(s:String) extends EncodedValue
-case class EncodedType(var t:JavaType) extends EncodedValue
-case class EncodedFieldVal(f:Field) extends EncodedValue
-case class EncodedMethodVal(m:Method) extends EncodedValue
-case class EncodedEnum(e:Field) extends EncodedValue
-case class EncodedArray(vals:Array[EncodedValue]) extends EncodedValue
-case class EncodedAnnotation(var javaType:JavaType, elements:Array[AnnotationElement]) extends EncodedValue
-case object EncodedNull extends EncodedValue
-case class EncodedBoolean(b:Boolean) extends EncodedValue
-class AnnotationElement(val name:String, val value:EncodedValue)
-
