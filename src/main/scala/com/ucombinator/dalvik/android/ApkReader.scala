@@ -30,7 +30,6 @@ class ApkReader(f:File) {
     dexIs.close
     dexOs.close
 
-    val dr = new DexReader(dexTmpFile)
-    dr.readFile
+    new DexReader(dexTmpFile).readFile
   }
 }

@@ -1,7 +1,7 @@
 package com.ucombinator.dalvik.AST
 
 import collection.SortedMap
-import collection.mutable.ArrayBuilder
+import annotation.tailrec
 import java.io.{File, FileInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream, ByteArrayInputStream, StreamCorruptedException}
 import java.nio.{ByteOrder, ByteBuffer}
 import java.nio.channels.FileChannel
@@ -75,18 +75,21 @@ class DexReader(ch:FileChannel) {
      * style Modified-UTF-8 string, which starts with a short to indicate the
      * length and has no null terminator. */
     def readUTF():String = {
-      val size = readUleb128.safeToInt       // read the size
-      val strBytes = new Array[Byte](size)   // allocate array to put string in
-      buffer.get(strBytes)                   // and read it
-      val nullByte = buffer.get              // make sure we got a null byte
-      if (nullByte != 0)
-        throw new OutOfRange("Expected null byte, but found " + nullByte)
-      val ob = new ByteArrayOutputStream     // allocate output stream
-      val dos = new DataOutputStream(ob)     // allocate a data outputstream
-      dos.writeChar(size.toChar)             // write the start bytes
-      ob.write(strBytes,0,size)              // write string bytes
+      @tailrec
+      def readUntilNull(i: Int, ls: Seq[Byte]): (Int, Seq[Byte]) = {
+        val b = reader.readByte
+        if (b == 0) (i, ls) else readUntilNull(i + 1, ls :+ b)
+      }
+      val size = readUleb128.safeToInt        // read the size in decoded characters
+      val (bytesSize, bytes) = readUntilNull(0, Seq.empty[Byte])
+      val ob = new ByteArrayOutputStream      // allocate output stream
+      val dos = new DataOutputStream(ob)      // allocate a data outputstream
+      dos.writeChar(bytesSize.toChar)         // write the start bytes
+      for(b <- bytes) ob.write(b)             // write string bytes
       // finally create an input stream, and read the string
-      new DataInputStream(new ByteArrayInputStream(ob.toByteArray)).readUTF
+      val str = new DataInputStream(new ByteArrayInputStream(ob.toByteArray)).readUTF
+      if (str.length != size) throw new Exception("expected " + size + " character string, but got " + str)
+      str
     }
   }
 
@@ -114,6 +117,7 @@ class DexReader(ch:FileChannel) {
 
   /* Used to indicate when an index into the types or strings array is not valid */
   private val NO_INDEX = 0xffffffff
+  private val NO_INDEX_LONG = 0xffffffffL
 
   /* value type indicators */
   private val VALUE_BYTE = 0x00
@@ -432,10 +436,11 @@ class DexReader(ch:FileChannel) {
     val elementWidth = reader.readUShort
     val size = reader.readUInt
     val byteCount = size.safeToInt * elementWidth
+    val totalShorts = (((size * elementWidth + 1) / 2) + 4).safeToInt
     val data = new Array[Short](size.safeToInt * elementWidth)
     for(i <- 0 until byteCount) data(i) = reader.readUByte
-    ((((size * elementWidth + 1) / 2) + 4).safeToInt,
-     new FillArrayDataPayload(size, elementWidth, data))
+    for(i <- 0 until ((totalShorts * 2) - (8 + byteCount))) reader.readUByte // throw away padding.
+    (totalShorts, new FillArrayDataPayload(size, elementWidth, data))
   }
 
   private def readInstructionFormat00op(opcode:Short):(Int, Instruction) = {
@@ -578,19 +583,19 @@ class DexReader(ch:FileChannel) {
       case 0x1c => {
         val ins = ConstClass(AA, null)
         // lookup the type from the constants pool, and setup a callback if it is not yet available
-        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins.b = lookupType(BBBB, ((t: JavaType) => ins.b = t))
         ins
       }
       case 0x1f => {
         val ins = CheckCast(AA, null)
         // lookup the type from the constants pool, and setup a callback if it is not yet available
-        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins.b = lookupType(BBBB, ((t: JavaType) => ins.b = t))
         ins
       }
       case 0x22 => {
         val ins = NewInstance(AA, null)
         // lookup the type from the constants pool, and setup a callback if it is not yet available
-        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins.b = lookupType(BBBB, ((t: JavaType) => ins.b = t))
         ins
       }
       case 0x38 => IfEqz(AA, (BBBB << 16) >> 16) // sign extend target
@@ -697,13 +702,13 @@ class DexReader(ch:FileChannel) {
       case 0x20 => {
         val ins = InstanceOf(A, B, null)
         // lookup type in constants pool, and setup a callback if it is not yet available
-        ins.C = lookupType(CCCC, ((t: JavaType) => ins.C = t))
+        ins.c = lookupType(CCCC, ((t: JavaType) => ins.c = t))
         ins
       }
       case 0x23 => {
         val ins = NewArray(A, B, null)
         // lookup type in constants pool, and setup a callback if it is not yet available
-        ins.C = lookupType(CCCC, ((t: JavaType) => ins.C = t))
+        ins.c = lookupType(CCCC, ((t: JavaType) => ins.c = t))
         ins
       }
       case 0x32 => IfEq(A, B, (CCCC << 16) >> 16) // sign extend to 32-bit constant
@@ -740,7 +745,7 @@ class DexReader(ch:FileChannel) {
 
   private def readInstructionFormat00op_AAAA_AAAA(opcode:Short):Instruction = {
     val nullByte = reader.readUByte
-    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA AAAA format but got: " + nullByte)
+    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA AAAA format but got: " + nullByte + " with opcode: " + opcode)
     val AAAA_AAAA = reader.readInt
     opcode match {
       case 0x2a => Goto32(AAAA_AAAA)
@@ -750,7 +755,7 @@ class DexReader(ch:FileChannel) {
 
   private def readInstructionFormat00op_AAAA_BBBB(opcode:Short):Instruction = {
     val nullByte = reader.readUByte
-    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA AAAA format but got: " + nullByte)
+    if (nullByte != 0) throw new Exception("Expected 0 byte in 00|op AAAA BBBB format but got: " + nullByte + " with opcode: " + opcode)
     val AAAA = reader.readUShort
     val BBBB = reader.readUShort
     opcode match {
@@ -784,8 +789,8 @@ class DexReader(ch:FileChannel) {
     val D = (DC >>> 4).toByte
     val C = (DC & 0x0f).toByte
     val FE = reader.readUByte
-    val F = (DC >>> 4).toByte
-    val E = (DC & 0x0f).toByte
+    val F = (FE >>> 4).toByte
+    val E = (FE & 0x0f).toByte
     val refs = A match {
                  case 0 => Array[Byte]()
                  case 1 => Array(C)
@@ -799,7 +804,7 @@ class DexReader(ch:FileChannel) {
     opcode match {
       case 0x24 => {
         val ins = FilledNewArray(refs, null)
-        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins.b = lookupType(BBBB, ((t: JavaType) => ins.b = t))
         ins
       }
       case 0x6e => InvokeVirtual(refs, methods(BBBB))
@@ -818,7 +823,7 @@ class DexReader(ch:FileChannel) {
     opcode match {
       case 0x25 => {
         val ins = FilledNewArrayRange(CCCC, AA, null)
-        ins.B = lookupType(BBBB, ((t: JavaType) => ins.B = t))
+        ins.b = lookupType(BBBB, ((t: JavaType) => ins.b = t))
         ins
       }
       case 0x74 => InvokeVirtualRange(CCCC, AA, methods(BBBB))
@@ -875,7 +880,7 @@ class DexReader(ch:FileChannel) {
   private def readInstructions(shortCount:Int, debugInfo:DebugInfo):SortedMap[Int,Instruction] = {
     var insns = SortedMap.empty[Int,Instruction]
     var shortOffset = 0
-    var debugTable = debugInfo.debugTable
+    var debugTable = if (debugInfo == null) Map.empty[Long,SourceInfo] else debugInfo.debugTable
     while(shortOffset < shortCount) {
       val (shortsRead, instruction) = readInstruction
       if (debugTable isDefinedAt shortOffset.toLong)
@@ -932,7 +937,7 @@ class DexReader(ch:FileChannel) {
       var allVarTable = Map.empty[Long, VarInfo]
       for (i <- 0 until parametersSize.safeToInt) {
         val idx = reader.readUleb128p1
-        val name = if (idx.safeToInt == NO_INDEX) null else strings(idx.safeToInt)
+        val name = if (idx == NO_INDEX) null else strings(idx.safeToInt)
         parameterNames(i) = name
         val varInfo = new VarInfo(i, name, parameterTypes(i), null)
         varTable += i.toLong -> varInfo
@@ -988,8 +993,8 @@ class DexReader(ch:FileChannel) {
           case DBG_SET_PROLOGUE_END => prologue_end = true
           case DBG_SET_EPILOGUE_BEGIN => epilogue_begin = true
           case DBG_SET_FILE => {
-            val idx = reader.readUleb128p1.safeToInt
-            fn = if (idx == NO_INDEX) null else strings(idx)
+            val idx = reader.readUleb128p1
+            fn = if (idx == NO_INDEX) null else strings(idx.safeToInt)
           }
           case _ => {
             val adjusted_opcode = opcode - DBG_FIRST_SPECIAL
@@ -1235,7 +1240,7 @@ class DexReader(ch:FileChannel) {
     val valTypeArg = reader.readUByte
     val valArg = ((valTypeArg & 0xe0) >>> 5) + 1
     (valTypeArg & 0x1f) match {
-      case VALUE_BYTE => checkRangeInclusive(valArg,1,1); new EncodedByte(readByte)
+      case VALUE_BYTE => checkRangeInclusive(valArg,1,1); new EncodedByte(reader.readByte)
       case VALUE_SHORT => checkRangeInclusive(valArg,1,2); new EncodedShort(readEncodedInt(true,2,valArg).toShort)
       case VALUE_CHAR => checkRangeInclusive(valArg,1,2); new EncodedChar(readEncodedInt(false,2,valArg).toChar)
       case VALUE_INT => checkRangeInclusive(valArg,1,4); new EncodedInt(readEncodedInt(true,4,valArg).toInt)
@@ -1282,7 +1287,7 @@ class DexReader(ch:FileChannel) {
       val superClassIdx = reader.readUInt
       val interfacesOff = reader.readUInt
       val sourceFileIdx = reader.readUInt
-      val sourceFile = if (sourceFileIdx == NO_INDEX) null else strings(sourceFileIdx.safeToInt)
+      val sourceFile = if (sourceFileIdx == NO_INDEX_LONG) null else strings(sourceFileIdx.safeToInt)
       val annotationsOff = reader.readUInt
       val classDataOff = reader.readUInt
       val staticValuesOff = reader.readUInt
@@ -1296,7 +1301,7 @@ class DexReader(ch:FileChannel) {
       val classDef = new ClassDef(className, accessFlags, null,
           interfaces, sourceFile, annotations, staticFields, instanceFields,
           directMethods, virtualMethods)
-      if (superClassIdx != NO_INDEX)
+      if (superClassIdx != NO_INDEX_LONG)
         classDef.superClass = lookupType(superClassIdx.safeToInt,
             ((t: JavaType) => classDef.superClass = t))
       typeMap += className -> classDef

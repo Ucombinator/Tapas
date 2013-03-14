@@ -3,19 +3,23 @@ package com.ucombinator.dalvik
 import java.io.PrintStream
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
+import com.ucombinator.dalvik.analysis.MethodCallAnalyzer
 
 object Analyzer extends App {
   var apkFile: String = null
   var dump = false
   var outputFile: String = null
   var databaseFile: String = null
+  var className: String = null
+  var methodName: String = null
 
   private def displayHelpMessage = {
     println("usage: analyzer [<options>] APK-file")
     println("  -h | --help :: print this message")
     println("  -d | --dump :: dump out the class definitions")
     println("  -o | --output-file :: set the file for dump")
-    println("  -db | --database :: the database file to use")
+    println("  -c | --class-name :: indicate the class name to analyze")
+    println("  -m | --method-name :: indicate the method name to analyze")
     sys.exit
   }
 
@@ -25,6 +29,8 @@ object Analyzer extends App {
       case ("-d" | "--dump") :: rest => dump = true ; parseOptions(rest)
       case ("-o" | "--output-file") :: fn :: rest => outputFile = fn ; parseOptions(rest)
       case ("-db" | "--database") :: fn :: rest => databaseFile = fn ; parseOptions(rest)
+      case ("-c" | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
+      case ("-m" | "--method-name") :: mn :: rest => methodName = mn ; parseOptions(rest)
       case fn :: rest => apkFile = fn ; parseOptions(rest)
       case Nil => Unit
       case _ => println("unrecognized option: " + args) ; displayHelpMessage
@@ -331,8 +337,10 @@ object Analyzer extends App {
     }
   }
 
-  private def rangeToVarRef(A:Short, C:Int):String =
-    "{v" + (A.toInt to (A + C - 1)).mkString(", v") + "}"
+  private def rangeToVarRef(A:Short, C:Int):String = {
+    val N = A + C - 1
+    if (C == N) "{v" + C + "}" else "{v" + C + " .. v" + N + "}"
+  }
 
   private def dumpClassDefs(classDefs: Array[ClassDef]): Unit = {
     for (cd <- classDefs) {
@@ -350,15 +358,30 @@ object Analyzer extends App {
     }
   }
 
-  parseOptions(args.toList)
-  if (apkFile == null) {
-    println("no apk file supplied.")
-    displayHelpMessage
+  private def wrapOutput[T](thunk: => T) : T = {
+    if (outputFile == null) thunk
+    else Console.withOut(new PrintStream(outputFile)) { thunk }
   }
+
+  parseOptions(args.toList)
+
+  if (apkFile == null) displayHelpMessage
+
   val apkReader = new ApkReader(apkFile)
   val classDefs = apkReader.readFile
 
-  if (dump) {
-    Console.withOut((if (outputFile == null) Console.out else new PrintStream(outputFile)))(dumpClassDefs(classDefs))
+  if (dump) wrapOutput { dumpClassDefs(classDefs) }
+
+  if (className != null && methodName != null) {
+    wrapOutput {
+      val analyzer = new MethodCallAnalyzer(classDefs)
+      println(analyzer.lookupMethods(className, methodName) match {
+                case Some(methods) =>
+                  (methods map {
+                    (m) => javaTypeToName(m.classType) + "." + m.name
+                   }).mkString(", ")
+                case None => "No such class/method"
+              })
+    }
   }
 }
