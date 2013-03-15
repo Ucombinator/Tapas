@@ -2,7 +2,30 @@ package com.ucombinator.dalvik.AST
 
 class Prototype(val shortDescriptor:String, var returnType:JavaType, val parameters:Array[JavaType])
 
-class Method(var classType:JavaType, val prototype:Prototype, val name:String)
+class Method(var classType:JavaType, val prototype:Prototype, val name:String) {
+  private def buildTypeName(t: JavaType): String = t match {
+    case VoidType         => "void"
+    case BooleanType      => "boolean"
+    case ByteType         => "byte"
+    case ShortType        => "short"
+    case CharType         => "char"
+    case IntType          => "int"
+    case LongType         => "long"
+    case FloatType        => "float"
+    case DoubleType       => "double"
+    case at: AbstractType => at.nameOf
+    case ar: ArrayType    => "Array[" + buildTypeName(ar.typeOf) + "]"
+    case cd: ClassDef     => cd.name
+    case _                => throw new Exception("Unrecognized JavaType: " + t)
+  }
+
+  def className: String = classType match {
+    case at: AbstractType => at.nameOf
+    case ar: ArrayType    => "Array[" + buildTypeName(ar.typeOf) + "]"
+    case cd: ClassDef     => cd.name
+    case _                => throw new Exception("Expected class or array type instead of " + classType)
+  }
+}
 
 class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) {
   val name = method.name

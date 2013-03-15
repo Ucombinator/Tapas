@@ -60,9 +60,15 @@ class ClassDef(val name: String, val accessFlags: Long, var superClass: JavaType
 
   val isEnum = ((accessFlags & AccessFlags.ACC_ENUM) != 0)
 
-  lazy val fields = staticFields ++ instanceFields
+  def combine[T](a1: Array[T], a2: Array[T])(implicit manifest: Manifest[T]): Array[T] = 
+    if (a1 == null)
+       if (a2 == null) new Array[T](0) else a2
+    else
+       if (a2 == null) a1 else a1 ++ a2
 
-  lazy val methods = directMethods ++ virtualMethods
+  lazy val fields = combine[FieldDef](instanceFields, staticFields)
+
+  lazy val methods = combine[MethodDef](directMethods, virtualMethods)
 
   lazy val methodMap = methods.foldLeft(Map.empty[String,MethodDef])((map, meth) => map + (meth.name -> meth))
   

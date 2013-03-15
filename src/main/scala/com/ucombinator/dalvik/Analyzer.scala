@@ -3,7 +3,7 @@ package com.ucombinator.dalvik
 import java.io.PrintStream
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
-import com.ucombinator.dalvik.analysis.MethodCallAnalyzer
+import com.ucombinator.dalvik.analysis.{MethodCallAnalyzer, SourceSinkMethodCallAnalyzer}
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -172,8 +172,8 @@ object Analyzer extends App {
       case ConstWide32(a, b) => "const-wide/32 v" + a + ", " + b
       case ConstWide(a, b) => "const-wide v" + a + ", " + b
       case ConstWideHigh16(a, b) => "const-wide/high16 v" + a + ", " + b
-      case ConstString(a, b) => "const-string v" + a + ", " + b
-      case ConstStringJumbo(a, b) => "const-string/jumbo v" + a + ", " + b
+      case ConstString(a, b) => "const-string v" + a + ", \"" + b + "\""
+      case ConstStringJumbo(a, b) => "const-string/jumbo v" + a + ", \"" + b + "\""
       case ConstClass(a, b) => "const-class v" + a + ", " + javaTypeToName(b)
       case NegInt(a, b) => "neg-int v" + a + ", v" + b
       case NegLong(a, b) => "neg-long v" + a + ", v" + b
@@ -345,9 +345,11 @@ object Analyzer extends App {
   private def dumpClassDefs(classDefs: Array[ClassDef]): Unit = {
     for (cd <- classDefs) {
       print("class: " + canonicalClassName(cd.name))
-      val superName = javaTypeToClassName(cd.superClass)
-      if (superName != "Ljava/lang/Object;")
-        print(" (super: " + canonicalClassName(superName) + ")")
+      if (cd.superClass != null) {
+        val superName = javaTypeToClassName(cd.superClass)
+        if (superName != "Ljava/lang/Object;")
+          print(" (super: " + canonicalClassName(superName) + ")")
+      }
       println
       if (cd.interfaces != null)
         println("  interfaces: " + (cd.interfaces map javaTypeToCanonicalClassName).mkString(", "))
@@ -382,6 +384,19 @@ object Analyzer extends App {
                    }).mkString(", ")
                 case None => "No such class/method"
               })
+    }
+  }
+  // Look, a real, if (very, very) simple, analyzsis
+  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(classDefs)
+  wrapOutput {
+    println("Methods that contain sources (non-exhaustive): ")
+    sourcesAndSinks.sources foreach {
+      (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name)
+    }
+    println
+    println("Methods that contain sinks (non-exhaustive): ")
+    sourcesAndSinks.sinks foreach {
+      (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name)
     }
   }
 }
