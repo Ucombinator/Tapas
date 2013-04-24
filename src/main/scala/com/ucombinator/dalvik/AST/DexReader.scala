@@ -2,6 +2,7 @@ package com.ucombinator.dalvik.AST
 
 import collection.SortedMap
 import annotation.tailrec
+import language.implicitConversions
 import java.io.{File, FileInputStream, DataInputStream, DataOutputStream, ByteArrayOutputStream, ByteArrayInputStream, StreamCorruptedException}
 import java.nio.{ByteOrder, ByteBuffer}
 import java.nio.channels.FileChannel

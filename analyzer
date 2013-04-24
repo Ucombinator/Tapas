@@ -1,0 +1,11 @@
+#!/bin/bash
+
+SCALA_VERSION=`scala -e "print(scala.util.Properties.versionString)" | sed "s/version //" | sed "s/-.*//"`
+CLASSPATH="target/scala-${SCALA_VERSION}/classes"
+
+if (! [ -e $CLASSPATH ]); then 
+  SCALA_VERSION=`echo $SCALA_VERSION | sed "s/\([0-9]\+\.[0-9]\+\).*/\1/"`
+  CLASSPATH="target/scala-${SCALA_VERSION}/classes"
+fi
+
+scala -cp $CLASSPATH com.ucombinator.dalvik.Analyzer $@

@@ -1,6 +1,8 @@
 package com.ucombinator.dalvik.analysis
 
+import xml.{XML, NodeSeq}
 import com.ucombinator.dalvik.AST._
+
 
 /** Class for performing abstract evaluation on a single method.
   *
@@ -43,7 +45,7 @@ class MethodAbstractEval(clazz: ClassDef, method: MethodDef) {
   }
 }
 
-class SourceSinkMethodCallAnalyzer(clazzes: Array[ClassDef]) {
+class SourceSinkMethodCallAnalyzer(fn: String, clazzes: Array[ClassDef]) {
   /* The following list comes from a standard list of sources and sinks.  Some
    * of these seem less like a source or sink procedure, then it does a
    * combination of source and sink methods with constructors for objects that
@@ -51,62 +53,35 @@ class SourceSinkMethodCallAnalyzer(clazzes: Array[ClassDef]) {
    * does not differentiate the method by type, only by name.  This is based on
    * the simplifying assumption that if one version of the method leaks, all of
    * the methods of this name leak. */
-  val knownSources = Map(
-        "Landroid/accounts/AccountManager;" -> Array("getAccounts", "getAccountsByType", "getAccountsByTypeAndFeatures", "getAuthTokenByFeatures", "hasFeatures", "addOnAccountsUpdatedListener"),
-        "Landroid/app/ActivityManager;" -> Array("getRecentTasks", "getRunningTasks"),
-        "Landroid/content/ContentResolver;" -> Array("query", "openFileDescriptor", "openInputStream", "openOutputStream"),
-        "Landroid/content/Intent;" -> Array("getExtras"),
-        "Landroid/hardware/Camera;" -> Array("open"),
-        "Landroid/hardware/SensorEventListener;" -> Array("onAccuracyChanged", "onSensorChanged"),
-        "Landroid/hardware/SensorListener;" -> Array("onAccuracyChanged", "onSensorChanged"),
-        "Landroid/location/Location;" -> Array("getLatitude", "getLongitude"),
-        "Landroid/location/LocationListener;" -> Array("onLocationChanged"),
-        "Landroid/location/LocationManager;" -> Array("getLastKnownLocation", "getProvider", "isProviderEnabled", "getBestProvider", "getProviders", "requestLocationUpdates"),
-        "Landroid/media/AudioRecord;" -> Array("AudioRecord"),
-        "Landroid/media/MediaRecorder;" -> Array("setAudioSource", "setVideoSource"),
-        "Landroid/os/DropBoxManager;" -> Array("getNextEntry"),
-        "Landroid/speech/SpeechRecognizer;" -> Array("cancel", "startListening", "stopListening"),
-        "Landroid/telephony/cdma/CdmaCellLocation;" -> Array("getBaseStationId"),
-        "Landroid/telephony/TelephonyManager;" -> Array("getCellLocation", "getDeviceId", "getDeviceSoftwareVersion", "getLine1Number", "getNetworkCountryIso", "getSimSerialNumber", "getSubscriberId", "getVoiceMailNumber", "getVoiceMailAlphaTag", "getNeighboringCellInfo", "incomingCallNumber"), 
-        "Landroid/view/OrientationListener;" -> Array("onAccuracyChanged", "onSensorChanged"),
-        "Landroid/widget/QuickContactBadge;" -> Array("assignContactFromEmail", "assignContactFromPhone"),
-        "Ljava/io/FileInputStream;" -> Array("FileInputStream", "available", "read", "getFD", "getChannel", "skip", "close", "finalize"),
-        "Landroid/telephony/SmsMessage;" -> Array("getMessageBody", "getOriginatingAddress"),
-        "Landroid/location/Location;" -> Array("getLatitude", "getLongitude"),
-        "Landroid/telephony/TelephonyManager;" -> Array("getDeviceId"),
-        "Ljava/io/File;" -> Array("listFiles"),
-        "Landroid/database/Cursor;" -> Array("getString")
-     )
-  val knownSinks = Map(
-        "Landroid/bluetooth/BluetoothSocket;" -> Array("getOutputStream"),
-        "Landroid/content/Intent;" -> Array("setData", "Intent"),
-        "Landroid/net/http/AndroidHttpClient;" -> Array("execute"),
-        "Landroid/provider/Browser;" -> Array("addSearchUrl", "saveBookmark", "sendString"),
-        "Landroid/telephony/gsm/SmsManager;" -> Array("sendDataMessage", "sendMultipartTextMessage", "sendTextMessage"),
-        "Landroid/telephony/SmsManager;" -> Array("SmsManager", "sendDataMessage", "sendMultipartTextMessage", "sendTextMessage", "getSubmitPdu"),
-        "Landroid/util/Log;" -> Array("isLoggable", "d", "e", "i", "println", "v", "w", "wtf", "getStackTraceString", "Log"),
-        "Landroid/webkit/WebSettings;" -> Array("setBlockNetworkLoads"),
-        "Landroid/webkit/WebView;" -> Array("WebView"),
-        "Ljava/io/FileOutputStream;" -> Array("FileOutputStream", "getFD", "getChannel", "close", "finalize", "write"),
-        "Ljava/io/FileWriter;" -> Array("FileWriter"),
-        "Ljava/io/RandomAccessFile;" -> Array("write", "writeByte", "writeBytes", "writeChar", "writeChars"),
-        "Ljava/net/DatagramSocket;" -> Array("DatagramSocket"),
-        "Ljava/net/HttpURLConnection;" -> Array("HttpURLConnection"),
-        "Ljava/net/MulticastSocket;" -> Array("MulticastSocket"),
-        "Ljava/net/NetworkInterface;" -> Array("NetworkInterface"),
-        "Ljava/net/ServerSocket;" -> Array("ServerSocket", "bind"),
-        "Ljava/net/Socket;" -> Array("Socket"),
-        "Ljava/net/URLConnection;" -> Array("getInputStream", "connect"),
-        "Lorg/apache/commons/logging/Log;" -> Array("isDebugEnabled", "isErrorEnabled", "isFatalEnabled", "isInfoEnabled", "isTraceEnabled", "isWarnEnabled", "debug", "error", "fatal", "info", "trace", "warn"),
-        "Lorg/apache/http/client/HttpClient;" -> Array("execute"),
-        "Lorg/apache/http/impl/client/AbstractHttpClient;" -> Array("execute"),
-        "Lorg/apache/http/impl/client/DefaultHttpClient;" -> Array("DefaultHttpClient"),
-        "Ljava/net/URL;" -> Array("openConnection"),
-        "Ljava/io/DataOutputStream;" -> Array("writeBytes", "write"),
-        "Ljava/io/FileOutputStream;" -> Array("write")
-     )
+
+  val xmlFile = XML.loadFile(fn)
+  private def buildMap(root: NodeSeq): Map[String,Array[String]] = {
+    root.foldLeft(Map.empty[String,Array[String]]) {
+      (m, node) => (node \ "method").foldLeft(m) {
+        (m, node) => {
+          val clazz = "L" + (node \ "@class-name").toString.replace(".", "/") + ";"
+          val methodName = (node \ "@name").toString
+          if (m.contains(clazz)) {
+             val entries = m(clazz)
+             if (entries.contains(methodName))
+                m
+             else
+                m + (clazz -> (entries :+ methodName))
+          } else {
+            m + (clazz -> Array(methodName))
+          }
+        }
+      }
+    }
+  }
+ 
+  val knownSources = buildMap(xmlFile \ "sources")
+  val knownSinks = buildMap(xmlFile \ "sinks")
+  val knownOther = buildMap(xmlFile \ "other")
+
   var _sources = Set.empty[MethodDef]
   var _sinks   = Set.empty[MethodDef]
+  var _other   = Set.empty[MethodDef]
   var classMap = clazzes.foldLeft(Map.empty[String,ClassDef]) { (m, cd) => m + (cd.name -> cd) }
 
   for (cd <- clazzes) {
@@ -123,6 +98,11 @@ class SourceSinkMethodCallAnalyzer(clazzes: Array[ClassDef]) {
              if (knownSinkMethods contains m.name)
                _sinks += md
            }
+           if (knownOther isDefinedAt m.className) {
+             val knownOtherMethods = knownOther(m.className)
+             if (knownOtherMethods contains m.name)
+               _other += md
+           }
         }
       }
     }
@@ -130,6 +110,7 @@ class SourceSinkMethodCallAnalyzer(clazzes: Array[ClassDef]) {
 
   def sources = _sources
   def sinks   = _sinks
+  def other   = _other
 }
 
 class MethodCallAnalyzer(clazzes: Array[ClassDef]) {

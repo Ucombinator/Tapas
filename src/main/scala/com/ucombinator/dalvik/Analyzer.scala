@@ -1,6 +1,6 @@
 package com.ucombinator.dalvik
 
-import java.io.PrintStream
+import java.io.{PrintStream, FileOutputStream}
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
 import com.ucombinator.dalvik.analysis.{MethodCallAnalyzer, SourceSinkMethodCallAnalyzer}
@@ -10,27 +10,30 @@ object Analyzer extends App {
   var dump = false
   var outputFile: String = null
   var databaseFile: String = null
+  var configFile: String = "config/sourceSink.xml" // set our default file location
   var className: String = null
   var methodName: String = null
 
   private def displayHelpMessage = {
     println("usage: analyzer [<options>] APK-file")
-    println("  -h | --help :: print this message")
-    println("  -d | --dump :: dump out the class definitions")
+    println("  -h | --help        :: print this message")
+    println("  -d | --dump        :: dump out the class definitions")
     println("  -o | --output-file :: set the file for dump")
-    println("  -c | --class-name :: indicate the class name to analyze")
+    println("  -c | --class-name  :: indicate the class name to analyze")
     println("  -m | --method-name :: indicate the method name to analyze")
+    println("  -f | --config      :: set the configuration file")
     sys.exit
   }
 
   private def parseOptions(args:List[String]):Unit = {
     args match {
-      case ("-h" | "--help") :: rest => displayHelpMessage
-      case ("-d" | "--dump") :: rest => dump = true ; parseOptions(rest)
-      case ("-o" | "--output-file") :: fn :: rest => outputFile = fn ; parseOptions(rest)
+      case ("-h"  | "--help") :: rest => displayHelpMessage
+      case ("-d"  | "--dump") :: rest => dump = true ; parseOptions(rest)
+      case ("-o"  | "--output-file") :: fn :: rest => outputFile = fn ; parseOptions(rest)
       case ("-db" | "--database") :: fn :: rest => databaseFile = fn ; parseOptions(rest)
-      case ("-c" | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
-      case ("-m" | "--method-name") :: mn :: rest => methodName = mn ; parseOptions(rest)
+      case ("-c"  | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
+      case ("-f"  | "--config") :: fn :: rest => configFile = fn ; parseOptions(rest)
+      case ("-m"  | "--method-name") :: mn :: rest => methodName = mn ; parseOptions(rest)
       case fn :: rest => apkFile = fn ; parseOptions(rest)
       case Nil => Unit
       case _ => println("unrecognized option: " + args) ; displayHelpMessage
@@ -362,7 +365,7 @@ object Analyzer extends App {
 
   private def wrapOutput[T](thunk: => T) : T = {
     if (outputFile == null) thunk
-    else Console.withOut(new PrintStream(outputFile)) { thunk }
+    else Console.withOut(new PrintStream(new FileOutputStream(outputFile, true))) { thunk }
   }
 
   parseOptions(args.toList)
@@ -386,17 +389,27 @@ object Analyzer extends App {
               })
     }
   }
+
   // Look, a real, if (very, very) simple, analyzsis
-  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(classDefs)
+  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(configFile, classDefs)
+  def printMethodsAndSources(mds: Set[MethodDef]) {
+    mds foreach {
+      (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name +
+                (md.sourceLocation match {
+                   case Some((fn,line,pos)) => " [" + fn + " at line: " + line + " pos: " + pos + "]"
+                   case None => ""
+                   }))
+    }
+  }
   wrapOutput {
-    println("Methods that contain sources (non-exhaustive): ")
-    sourcesAndSinks.sources foreach {
-      (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name)
-    }
+    println("Methods that call sources (non-exhaustive): ")
+    printMethodsAndSources(sourcesAndSinks.sources)
     println
-    println("Methods that contain sinks (non-exhaustive): ")
-    sourcesAndSinks.sinks foreach {
-      (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name)
-    }
+    println("Methods that call sinks (non-exhaustive): ")
+    printMethodsAndSources(sourcesAndSinks.sinks)
+    println
+    println("Methods that call other interesting methods (non-exhaustive): ")
+    printMethodsAndSources(sourcesAndSinks.other)
+    println
   }
 }

@@ -63,6 +63,13 @@ class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) {
   def returnType: JavaType = method.prototype.returnType
 
   def parameters: Array[JavaType] = method.prototype.parameters
+
+  def sourceLocation: Option[(String,Long,Long)] = {
+    code.insns.find { (insn) => insn.sourceInfo != null } match {
+      case Some(insn) => Some((insn.sourceInfo.fn, insn.sourceInfo.line, insn.sourceInfo.position))
+      case None => None
+    }
+  }
 }
 
 class CodeItem(val registersSize:Int, val insSize:Int, val outsSize:Int,
