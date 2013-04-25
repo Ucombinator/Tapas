@@ -20,7 +20,7 @@ import com.ucombinator.dalvik.AST._
   * @param clazzes an Array of ClassDef objects that represents all the know
   *                classes in the program to be analyzed.
   */
-class SourceSinkMethodCallAnalyzer(fn: String, clazzes: Array[ClassDef]) {
+class SourceSinkMethodCallAnalyzer(fn: String, simpleCallGraph: SimpleMethodCallGraph) {
   /* The following list comes from a standard list of sources and sinks.  Some
    * of these seem less like a source or sink procedure, then it does a
    * combination of source and sink methods with constructors for objects that
@@ -53,8 +53,6 @@ class SourceSinkMethodCallAnalyzer(fn: String, clazzes: Array[ClassDef]) {
       }
     }
   }
-
-  private val simpleCallGraph = new SimpleMethodCallGraph(clazzes)
 
   private var _sources = buildSet(xmlFile \ "sources", simpleCallGraph.classMap)
   private var _sinks   = buildSet(xmlFile \ "sinks", simpleCallGraph.classMap)

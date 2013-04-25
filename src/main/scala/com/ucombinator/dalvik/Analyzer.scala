@@ -403,7 +403,7 @@ object Analyzer extends App {
   }
 
   // Look, a real, if (very, very) simple, analyzsis
-  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(configFile, classDefs)
+  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(configFile, simpleCallGraph)
   def printMethodsAndSources(mds: Set[MethodDef]) {
     mds foreach {
       (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name +
