@@ -3,7 +3,7 @@ package com.ucombinator.dalvik
 import java.io.{PrintStream, FileOutputStream}
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
-import com.ucombinator.dalvik.analysis.{MethodCallAnalyzer, SourceSinkMethodCallAnalyzer}
+import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer}
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -374,19 +374,31 @@ object Analyzer extends App {
 
   val apkReader = new ApkReader(apkFile)
   val classDefs = apkReader.readFile
+  val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
 
   if (dump) wrapOutput { dumpClassDefs(classDefs) }
 
   if (className != null && methodName != null) {
     wrapOutput {
-      val analyzer = new MethodCallAnalyzer(classDefs)
-      println(analyzer.lookupMethods(className, methodName) match {
-                case Some(methods) =>
-                  (methods map {
-                    (m) => javaTypeToName(m.classType) + "." + m.name
-                   }).mkString(", ")
-                case None => "No such class/method"
-              })
+      println(
+        (if (simpleCallGraph.classMap isDefinedAt className) {
+           val cdp = simpleCallGraph.classMap(className)
+           if (cdp.methodMap isDefinedAt methodName) {
+             (cdp.methodMap(methodName).calls map {
+                mdp => {
+                  val m = if (mdp.method == null)
+                            mdp.methodDef.method
+                          else
+                            mdp.method
+                  javaTypeToName(m.classType) + "." + m.name
+                }
+              }).mkString(", ")
+           } else {
+             "No method " + methodName + " on class " + className
+           }
+         } else {
+           "No class " + className
+         }))
     }
   }
 
