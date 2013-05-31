@@ -137,6 +137,50 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
                  (map, method) => map + (method.name -> new MethodDefProxy(method))
                }))
     }
+  
+  protected def addMethod(methodProxy : MethodDefProxy)(calledMethod: Method) {
+    def addToClass(clazzProxy: ClassDefProxy) : Unit = {
+      val mdProxy = if (clazzProxy.methodMap isDefinedAt calledMethod.name) {
+        clazzProxy.methodMap(calledMethod.name)
+      } else {
+        val mdProxy = new MethodDefProxy(calledMethod)
+        clazzProxy.methodMap += calledMethod.name -> mdProxy
+        mdProxy
+      }
+      methodProxy.calls += mdProxy
+      mdProxy.calledBy += methodProxy
+      clazzProxy.subclasses foreach addToClass
+    }
+    val className = javaTypeToName(calledMethod.classType)
+    val classProxy = if (_classMap isDefinedAt className) {
+      _classMap(className)
+    } else {
+      val classProxy = new ClassDefProxy(null,
+                                         Map.empty[String, MethodDefProxy])
+      _classMap += className -> classProxy
+      classProxy
+    }
+    addToClass(classProxy)
+  }
+  
+  protected def processInstructions(methodProxy: MethodDefProxy)(code: CodeItem) {
+    val add = addMethod(methodProxy)_
+    code.insns foreach {
+      (insn) => insn match {
+        case InvokeSuper(args, b)          => add(b)
+        case InvokeDirect(args, b)         => add(b)
+        case InvokeStatic(args, b)         => add(b)
+        case InvokeInterface(args, b)      => add(b)
+        case InvokeVirtual(args, b)        => add(b)
+        case InvokeVirtualRange(c, a, b)   => add(b)
+        case InvokeSuperRange(c, a, b)     => add(b)
+        case InvokeDirectRange(c, a, b)    => add(b)
+        case InvokeStaticRange(c, a, b)    => add(b)
+        case InvokeInterfaceRange(c, a, b) => add(b)
+        case _                             => false
+      }
+    }
+  }
 
   _classMap foreach {
     (t) => {
@@ -166,46 +210,9 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
       clazz.methods foreach {
         (method) => {
           val methodProxy: MethodDefProxy = classProxy.methodMap(method.name)
-          def addMethod(calledMethod: Method) {
-            def addToClass(clazzProxy: ClassDefProxy) : Unit = {
-              val mdProxy = if (clazzProxy.methodMap isDefinedAt calledMethod.name) {
-                              clazzProxy.methodMap(calledMethod.name)
-                            } else {
-                              val mdProxy = new MethodDefProxy(calledMethod)
-                              clazzProxy.methodMap += calledMethod.name -> mdProxy
-                              mdProxy
-                            }
-              methodProxy.calls += mdProxy
-              mdProxy.calledBy += methodProxy
-              clazzProxy.subclasses foreach addToClass
-            }
-            val className = javaTypeToName(calledMethod.classType)
-            val classProxy = if (_classMap isDefinedAt className) {
-                               _classMap(className)
-                             } else {
-                               val classProxy = new ClassDefProxy(null,
-                                                  Map.empty[String, MethodDefProxy])
-                               _classMap += className -> classProxy
-                               classProxy
-                             }
-            addToClass(classProxy)
-          }
+          val process = processInstructions(methodProxy)_
           if (method.code != null && method.code.insns != null) {
-            method.code.insns foreach {
-              (insn) => insn match {
-                case InvokeSuper(args, b)          => addMethod(b)
-                case InvokeDirect(args, b)         => addMethod(b)
-                case InvokeStatic(args, b)         => addMethod(b)
-                case InvokeInterface(args, b)      => addMethod(b)
-                case InvokeVirtual(args, b)        => addMethod(b)
-                case InvokeVirtualRange(c, a, b)   => addMethod(b)
-                case InvokeSuperRange(c, a, b)     => addMethod(b)
-                case InvokeDirectRange(c, a, b)    => addMethod(b)
-                case InvokeStaticRange(c, a, b)    => addMethod(b)
-                case InvokeInterfaceRange(c, a, b) => addMethod(b)
-                case _                             => false
-              }
-            }
+        	process(method.code)
           }
         }
       }
