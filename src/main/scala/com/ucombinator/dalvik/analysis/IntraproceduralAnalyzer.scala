@@ -11,4 +11,8 @@ class IntraproceduralAnalyzer(classes: Array[ClassDef]) extends SimpleMethodCall
       }
     }
   }
+
+  def printTest {
+    println("test");
+  }
 }

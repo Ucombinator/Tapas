@@ -3,7 +3,7 @@ package com.ucombinator.dalvik
 import java.io.{PrintStream, FileOutputStream}
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
-import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer}
+import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, IntraproceduralAnalyzer}
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -13,6 +13,7 @@ object Analyzer extends App {
   var configFile: String = "config/sourceSink.xml" // set our default file location
   var className: String = null
   var methodName: String = null
+  var intra: Boolean = false
 
   private def displayHelpMessage = {
     println("usage: analyzer [<options>] APK-file")
@@ -29,6 +30,7 @@ object Analyzer extends App {
     args match {
       case ("-h"  | "--help") :: rest => displayHelpMessage
       case ("-d"  | "--dump") :: rest => dump = true ; parseOptions(rest)
+      case ("-i"  | "--intraprocedural") :: rest => intra = true ; parseOptions(rest)
       case ("-o"  | "--output-file") :: fn :: rest => outputFile = fn ; parseOptions(rest)
       case ("-db" | "--database") :: fn :: rest => databaseFile = fn ; parseOptions(rest)
       case ("-c"  | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
@@ -375,6 +377,11 @@ object Analyzer extends App {
   val apkReader = new ApkReader(apkFile)
   val classDefs = apkReader.readFile
   val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
+  val intraproceduralAnalyzer = if (intra) {
+    new IntraproceduralAnalyzer(classDefs)
+  } else {
+    new IntraproceduralAnalyzer(new Array(0))
+  }
 
   if (dump) wrapOutput { dumpClassDefs(classDefs) }
 
@@ -400,6 +407,10 @@ object Analyzer extends App {
            "No class " + className
          }))
     }
+  }
+
+  if (intra) {
+    intraproceduralAnalyzer.printTest
   }
 
   // Look, a real, if (very, very) simple, analyzsis
