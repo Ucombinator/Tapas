@@ -20,7 +20,7 @@ case object Unbounded extends AbstractCounterInt {
 // (control-state x stack-summary x proposition* x counter)
 abstract class State {
   // C
-  def statement: List[Instruction]
+  def statements: List[Instruction]
   def framePointer: FramePointer
   // S: lookup by address in store
   def lookup(address: Address): Any

@@ -163,7 +163,8 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
     addToClass(classProxy)
   }
   
-  protected def processInstructions(methodProxy: MethodDefProxy)(code: CodeItem) {
+  protected def processInstructions(methodProxy: MethodDefProxy)(method: MethodDef) {
+    val code = method.code
     val add = addMethod(methodProxy)_
     code.insns foreach {
       (insn) => insn match {
@@ -212,7 +213,7 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
           val methodProxy: MethodDefProxy = classProxy.methodMap(method.name)
           val process = processInstructions(methodProxy)_
           if (method.code != null && method.code.insns != null) {
-        	process(method.code)
+        	process(method)
           }
         }
       }

@@ -8,8 +8,10 @@ class IntraproceduralAnalyzer(classes: Array[ClassDef]) extends SimpleMethodCall
   // that would demonstrate which inputs influence which outputs
   private val callGraph: Map[Method, List[Method]] = Map.empty
   
-  private def next(s: State): Boolean = { // Set[State] = {
-    val insn = s.statement.head
+//  private def makeLabelTable()
+  
+  private def next(s: State): Boolean = { // TODO: should be Set[State] = {
+    val insn = s.statements.head
     insn match {
       case End => false
       case Nop => false
@@ -239,7 +241,9 @@ class IntraproceduralAnalyzer(classes: Array[ClassDef]) extends SimpleMethodCall
       case _ => throw new Exception("unrecognized instruction: " + insn)
     }
   }
-  override def processInstructions(methodProxy: MethodDefProxy)(code: CodeItem): Unit = {
+  
+  override def processInstructions(methodProxy: MethodDefProxy)(method: MethodDef): Unit = {
+    val t = new AnnotatedMethodDef(method.method, method.accessFlags, method.code)
     
   }
 
