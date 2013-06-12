@@ -19,8 +19,8 @@ case object Unbounded extends AbstractCounterInt {
 
 // (control-state x stack-summary x proposition* x counter)
 abstract class State {
-  // C: statements have pointers to next statements
-  def statement: Instruction
+  // C
+  def statement: List[Instruction]
   def framePointer: FramePointer
   // S: lookup by address in store
   def lookup(address: Address): Any
