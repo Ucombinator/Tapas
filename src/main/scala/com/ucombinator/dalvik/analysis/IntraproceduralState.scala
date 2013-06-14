@@ -5,11 +5,11 @@ import com.ucombinator.dalvik.analysis.Address
 import com.ucombinator.dalvik.analysis.FramePointer
 import com.ucombinator.dalvik.AST.Instruction
 
-class IntraproceduralState(statements_ : List[Instruction], framePointer_ : FramePointer, store_ : Map[Address, Any]) extends State {
+class IntraproceduralState(c : List[Instruction], fp : FramePointer, s : Map[Address, Any]) extends State {
   
-  private val _statements: List[Instruction] = statements_
-  private val _framePointer: FramePointer = framePointer_
-  private val _store: Map[Address, Any] = store_
+  private val _statements: List[Instruction] = c
+  private val _framePointer: FramePointer = fp
+  private val _store: Map[Address, Any] = s
   val stackSummary: Any = None
   val assumptions: Any = None
 
