@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <method-analyzer>
   <sinks>
-    <method class-name="android.bluetooth.BluetoothSocket" name="getOutputStream" return-type="java.io.OutputStream" category="FILE"/>
-    <method class-name="android.content.Intent" name="setData" return-type="android.content.Intent" category="FILE">
+    <method class-name="java.io.File" name="delete" category="FILE" />
+    <method class-name="android.bluetooth.BluetoothSocket" name="getOutputStream" return-type="java.io.OutputStream" category="network"/>
+    <method class-name="android.content.Context" name="getClassLoader" category="reflection" /> 
+    <method class-name="android.content.Intent" name="setData" return-type="android.content.Intent" category="ipc">
       <argument type="android.net.Uri"/>
     </method>
-    <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="FILE"/>
-    <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="FILE">
+    <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="ipc"/>
+    <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="ipc">
       <argument type="android.content.Context"/>
       <argument type="java.lang.Class"/>
     </method>
-    <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="FILE">
+    <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="ipc">
       <argument type="android.content.Intent"/>
     </method>
     <method class-name="android.content.Intent" name="Intent" return-type="android.content.Intent" category="SMS">
@@ -62,6 +64,7 @@
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
+    <method class-name="android.os.AsyncTask" name="<init>" category="thread" />
     <method class-name="android.provider.Browser" name="addSearchUrl" return-type="void" category="BROWSER">
       <argument type="android.content.ContentResolver"/>
       <argument type="java.lang.String"/>
@@ -90,14 +93,14 @@
       <argument type="java.util.ArrayList"/>
       <argument type="java.util.ArrayList"/>
     </method>
-    <method class-name="android.telephony.gsm.SmsManager" name="sendTextMessage" return-type="void" category="INTERNET">
+    <method class-name="android.telephony.gsm.SmsManager" name="sendTextMessage" return-type="void" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="android.app.PendingIntent"/>
       <argument type="android.app.PendingIntent"/>
     </method>
-    <method class-name="android.telephony.gsm.SmsManager" name="sendDataMessage" return-type="void" category="INTERNET">
+    <method class-name="android.telephony.gsm.SmsManager" name="sendDataMessage" return-type="void" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="short"/>
@@ -105,9 +108,9 @@
       <argument type="android.app.PendingIntent"/>
       <argument type="Landroid.app.PendingIntent"/>
     </method>
-    <method class-name="android.telephony.gsm.SmsManager Deprecated Class" name="SmsManager" return-type="android.telephony.gsm.SmsManager Deprecated Class" category="INTERNET"/>
-    <method class-name="android.telephony.SmsManager" name="SmsManager" return-type="android.telephony.SmsManager" category="Internet"/>
-    <method class-name="android.telephony.SmsManager" name="sendDataMessage" return-type="void" category="Internet">
+    <method class-name="android.telephony.gsm.SmsManager" name="SmsManager" return-type="android.telephony.gsm.SmsManager Deprecated Class" category="SMS"/>
+    <method class-name="android.telephony.SmsManager" name="SmsManager" return-type="android.telephony.SmsManager" category="SMS"/>
+    <method class-name="android.telephony.SmsManager" name="sendDataMessage" return-type="void" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="short"/>
@@ -115,108 +118,109 @@
       <argument type="android.app.PendingIntent"/>
       <argument type="Landroid.app.PendingIntent"/>
     </method>
-    <method class-name="android.telephony.SmsManager" name="sendMultipartTextMessage" return-type="void" category="Internet">
+    <method class-name="android.telephony.SmsManager" name="sendMultipartTextMessage" return-type="void" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.util.ArrayList"/>
       <argument type="java.util.ArrayList"/>
       <argument type="java.util.ArrayList"/>
     </method>
-    <method class-name="android.telephony.SmsManager" name="sendTextMessage" return-type="void" category="Internet">
+    <method class-name="android.telephony.SmsManager" name="sendTextMessage" return-type="void" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="android.app.PendingIntent"/>
       <argument type="android.app.PendingIntent"/>
     </method>
-    <method class-name="android.telephony.SmsMessage" name="getSubmitPdu" return-type="android.telephony.SmsMessage.SubmitPdu" category="Internet">
+    <method class-name="android.telephony.SmsMessage" name="getSubmitPdu" return-type="android.telephony.SmsMessage.SubmitPdu" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="boolean"/>
     </method>
-    <method class-name="android.telephony.SmsMessage" name="getSubmitPdu" return-type="android.telephony.SmsMessage.SubmitPdu" category="Internet">
+    <method class-name="android.telephony.SmsMessage" name="getSubmitPdu" return-type="android.telephony.SmsMessage.SubmitPdu" category="SMS">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="short"/>
       <argument type="byte[]"/>
       <argument type="boolean"/>
     </method>
-    <method class-name="android.util.Log" name="isLoggable" return-type="boolean" category="Internet">
+    <method class-name="android.telephony.SmsMessage.SubmitPdu" name="<init>" category="sms" />
+    <method class-name="android.util.Log" name="isLoggable" return-type="boolean" category="logging">
       <argument type="java.lang.String"/>
       <argument type="int"/>
     </method>
-    <method class-name="android.util.Log" name="d" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="d" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="d" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="d" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="e" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="e" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="e" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="e" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="i" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="i" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="i" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="i" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="println" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="println" return-type="int" category="logging">
       <argument type="int"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="v" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="v" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="v" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="v" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="w" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="w" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="w" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="w" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="w" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="w" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="wtf" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="wtf" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.util.Log" name="wtf" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="wtf" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="wtf" return-type="int" category="Internet">
+    <method class-name="android.util.Log" name="wtf" return-type="int" category="logging">
       <argument type="java.lang.String"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="getStackTraceString" return-type="java.lang.String" category="Internet">
+    <method class-name="android.util.Log" name="getStackTraceString" return-type="java.lang.String" category="logging">
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="android.util.Log" name="Log" return-type="android.util.Log" category="Internet"/>
+    <method class-name="android.util.Log" name="Log" return-type="android.util.Log" category="logging"/>
     <method class-name="android.webkit.WebSettings" name="setBlockNetworkLoads" return-type="void" category="Internet">
       <argument type="boolean"/>
     </method>
@@ -238,6 +242,7 @@
       <argument type="int"/>
       <argument type="boolean"/>
     </method>
+    <method class-name="java.io.BufferedOutputStream" name="<init>" category="filesystem" />
     <method class-name="java.io.FileOutputStream" name="FileOutputStream" return-type="java.io.FileOutputStream" category="Internet">
       <argument type="java.io.File"/>
     </method>
@@ -321,6 +326,7 @@
     <method class-name="java.net.HttpURLConnection" name="HttpURLConnection" return-type="java.net.HttpURLConnection" category="none">
       <argument type="java.net.URL"/>
     </method>
+    <method class-name="java.net.HttpURLConnection" name="connect" category="network" />
     <method class-name="java.net.MulticastSocket" name="MulticastSocket" return-type="java.net.MulticastSocket" category="none"/>
     <method class-name="java.net.MulticastSocket" name="MulticastSocket" return-type="java.net.MulticastSocket" category="none">
       <argument type="int"/>
@@ -388,168 +394,168 @@
     </method>
     <method class-name="java.net.URLConnection" name="getInputStream" return-type="java.io.InputStream" category="none"/>
     <method class-name="java.net.URLConnection" name="connect" return-type="void" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="isDebugEnabled" return-type="boolean" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="isErrorEnabled" return-type="boolean" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="isFatalEnabled" return-type="boolean" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="isInfoEnabled" return-type="boolean" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="isTraceEnabled" return-type="boolean" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="isWarnEnabled" return-type="boolean" category="none"/>
-    <method class-name="org.apache.commons.logging.Log" name="debug" return-type="void" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="isDebugEnabled" return-type="boolean" category="logging"/>
+    <method class-name="org.apache.commons.logging.Log" name="isErrorEnabled" return-type="boolean" category="logging"/>
+    <method class-name="org.apache.commons.logging.Log" name="isFatalEnabled" return-type="boolean" category="logging"/>
+    <method class-name="org.apache.commons.logging.Log" name="isInfoEnabled" return-type="boolean" category="logging"/>
+    <method class-name="org.apache.commons.logging.Log" name="isTraceEnabled" return-type="boolean" category="logging"/>
+    <method class-name="org.apache.commons.logging.Log" name="isWarnEnabled" return-type="boolean" category="logging"/>
+    <method class-name="org.apache.commons.logging.Log" name="debug" return-type="void" category="logging">
       <argument type="java.lang.Object"/>
     </method>
-    <method class-name="org.apache.commons.logging.Log" name="debug" return-type="void" category="none">
-      <argument type="java.lang.Object"/>
-      <argument type="java.lang.Throwable"/>
-    </method>
-    <method class-name="org.apache.commons.logging.Log" name="error" return-type="void" category="none">
-      <argument type="java.lang.Object"/>
-    </method>
-    <method class-name="org.apache.commons.logging.Log" name="error" return-type="void" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="debug" return-type="void" category="logging">
       <argument type="java.lang.Object"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="org.apache.commons.logging.Log" name="fatal" return-type="void" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="error" return-type="void" category="logging">
       <argument type="java.lang.Object"/>
     </method>
-    <method class-name="org.apache.commons.logging.Log" name="fatal" return-type="void" category="none">
-      <argument type="java.lang.Object"/>
-      <argument type="java.lang.Throwable"/>
-    </method>
-    <method class-name="org.apache.commons.logging.Log" name="info" return-type="void" category="none">
-      <argument type="java.lang.Object"/>
-    </method>
-    <method class-name="org.apache.commons.logging.Log" name="info" return-type="void" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="error" return-type="void" category="logging">
       <argument type="java.lang.Object"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="org.apache.commons.logging.Log" name="trace" return-type="void" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="fatal" return-type="void" category="logging">
       <argument type="java.lang.Object"/>
     </method>
-    <method class-name="org.apache.commons.logging.Log" name="trace" return-type="void" category="none">
-      <argument type="java.lang.Object"/>
-      <argument type="java.lang.Throwable"/>
-    </method>
-    <method class-name="org.apache.commons.logging.Log" name="warn" return-type="void" category="none">
-      <argument type="java.lang.Object"/>
-    </method>
-    <method class-name="org.apache.commons.logging.Log" name="warn" return-type="void" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="fatal" return-type="void" category="logging">
       <argument type="java.lang.Object"/>
       <argument type="java.lang.Throwable"/>
     </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="none">
+    <method class-name="org.apache.commons.logging.Log" name="info" return-type="void" category="logging">
+      <argument type="java.lang.Object"/>
+    </method>
+    <method class-name="org.apache.commons.logging.Log" name="info" return-type="void" category="logging">
+      <argument type="java.lang.Object"/>
+      <argument type="java.lang.Throwable"/>
+    </method>
+    <method class-name="org.apache.commons.logging.Log" name="trace" return-type="void" category="logging">
+      <argument type="java.lang.Object"/>
+    </method>
+    <method class-name="org.apache.commons.logging.Log" name="trace" return-type="void" category="logging">
+      <argument type="java.lang.Object"/>
+      <argument type="java.lang.Throwable"/>
+    </method>
+    <method class-name="org.apache.commons.logging.Log" name="warn" return-type="void" category="logging">
+      <argument type="java.lang.Object"/>
+    </method>
+    <method class-name="org.apache.commons.logging.Log" name="warn" return-type="void" category="logging">
+      <argument type="java.lang.Object"/>
+      <argument type="java.lang.Throwable"/>
+    </method>
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="network">
       <argument type="org.apache.http.client.methods.HttpUriRequest"/>
       <argument type="org.apache.http.client.ResponseHandler"/>
     </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="none">
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="network">
       <argument type="org.apache.http.client.methods.HttpUriRequest"/>
       <argument type="org.apache.http.client.ResponseHandler"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="none">
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="network">
       <argument type="org.apache.http.HttpHost"/>
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.client.ResponseHandler"/>
     </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="none">
-      <argument type="org.apache.http.HttpHost"/>
-      <argument type="org.apache.http.HttpRequest"/>
-      <argument type="org.apache.http.client.ResponseHandler"/>
-      <argument type="org.apache.http.protocol.HttpContext"/>
-    </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-    </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-      <argument type="org.apache.http.protocol.HttpContext"/>
-    </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.HttpHost"/>
-      <argument type="org.apache.http.HttpRequest"/>
-    </method>
-    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.HttpHost"/>
-      <argument type="org.apache.http.HttpRequest"/>
-      <argument type="org.apache.http.protocol.HttpContext"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-      <argument type="org.apache.http.client.ResponseHandler"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-      <argument type="org.apache.http.client.ResponseHandler"/>
-      <argument type="org.apache.http.protocol.HttpContext"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-      <argument type="org.apache.http.client.ResponseHandler"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-      <argument type="org.apache.http.client.ResponseHandler"/>
-      <argument type="org.apache.http.protocol.HttpContext"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
-      <argument type="org.apache.http.HttpHost"/>
-      <argument type="org.apache.http.HttpRequest"/>
-      <argument type="org.apache.http.client.ResponseHandler"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="T" category="network">
       <argument type="org.apache.http.HttpHost"/>
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.client.ResponseHandler"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
+    </method>
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
+      <argument type="org.apache.http.protocol.HttpContext"/>
+    </method>
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.HttpHost"/>
+      <argument type="org.apache.http.HttpRequest"/>
+    </method>
+    <method class-name="org.apache.http.client.HttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.HttpHost"/>
+      <argument type="org.apache.http.HttpRequest"/>
+      <argument type="org.apache.http.protocol.HttpContext"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
+      <argument type="org.apache.http.client.ResponseHandler"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
+      <argument type="org.apache.http.client.ResponseHandler"/>
+      <argument type="org.apache.http.protocol.HttpContext"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
+      <argument type="org.apache.http.client.ResponseHandler"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
+      <argument type="org.apache.http.client.ResponseHandler"/>
+      <argument type="org.apache.http.protocol.HttpContext"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
+      <argument type="org.apache.http.HttpHost"/>
+      <argument type="org.apache.http.HttpRequest"/>
+      <argument type="org.apache.http.client.ResponseHandler"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
       <argument type="org.apache.http.HttpHost"/>
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.client.ResponseHandler"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="none">
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
+      <argument type="org.apache.http.HttpHost"/>
+      <argument type="org.apache.http.HttpRequest"/>
+      <argument type="org.apache.http.client.ResponseHandler"/>
+      <argument type="org.apache.http.protocol.HttpContext"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="T" category="network">
       <argument type="org.apache.http.HttpHost"/>
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.client.ResponseHandler"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
       <argument type="org.apache.http.client.methods.HttpUriRequest"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-      <argument type="org.apache.http.protocol.HttpContext"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
-    </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
       <argument type="org.apache.http.client.methods.HttpUriRequest"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.HttpHost"/>
-      <argument type="org.apache.http.HttpRequest"/>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
-      <argument type="org.apache.http.HttpHost"/>
-      <argument type="org.apache.http.HttpRequest"/>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.client.methods.HttpUriRequest"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
       <argument type="org.apache.http.HttpHost"/>
       <argument type="org.apache.http.HttpRequest"/>
     </method>
-    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="none">
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
       <argument type="org.apache.http.HttpHost"/>
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="org.apache.http.impl.client.DefaultHttpClient" name="DefaultHttpClient" return-type="org.apache.http.impl.client.DefaultHttpClient" category="none"/>
-    <method class-name="org.apache.http.impl.client.DefaultHttpClient" name="DefaultHttpClient" return-type="org.apache.http.impl.client.DefaultHttpClient" category="none">
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.HttpHost"/>
+      <argument type="org.apache.http.HttpRequest"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="network">
+      <argument type="org.apache.http.HttpHost"/>
+      <argument type="org.apache.http.HttpRequest"/>
+      <argument type="org.apache.http.protocol.HttpContext"/>
+    </method>
+    <method class-name="org.apache.http.impl.client.DefaultHttpClient" name="DefaultHttpClient" return-type="org.apache.http.impl.client.DefaultHttpClient" category="network"/>
+    <method class-name="org.apache.http.impl.client.DefaultHttpClient" name="DefaultHttpClient" return-type="org.apache.http.impl.client.DefaultHttpClient" category="network">
       <argument type="org.apache.http.conn.ClientConnectionManager"/>
       <argument type="org.apache.http.params.HttpParams"/>
     </method>
-    <method class-name="org.apache.http.impl.client.DefaultHttpClient" name="DefaultHttpClient" return-type="org.apache.http.impl.client.DefaultHttpClient" category="none">
+    <method class-name="org.apache.http.impl.client.DefaultHttpClient" name="DefaultHttpClient" return-type="org.apache.http.impl.client.DefaultHttpClient" category="network">
       <argument type="org.apache.http.params.HttpParams"/>
     </method>
     <method class-name="org.apache.http.impl.client.AbstractHttpClient" name="execute" return-type="org.apache.http.HttpResponse" category="INTERNET">
@@ -567,6 +573,13 @@
     <method class-name="java.io.FileOutputStream" name="write" return-type="void" category="WRITEOUT">
       <argument type="byte[]"/>
     </method>
+    <method class-name="java.io.OutputStream" name="write" category="filesystem" />
+    <method class-name="java.io.PrintWriter" name="println" category="filesystem" />
+    <method class-name="java.lang.Class" name="forName" category="reflection" />
+    <method class-name="java.lang.Class" name="getMethod" category="reflection" />
+    <method class-name="java.lang.Class" name="newInstance" category="reflection" />
+    <method class-name="java.lang.Object" name="getClass" category="reflection" />
+    <method class-name="java.lang.reflect.Method" name="invoke" cateogry="reflection" />
   </sinks>
   <sources>
     <method class-name="android.accounts.AccountManager" name="getAccounts" return-type="android.accounts.Account[]" category="GET_ACCOUNTS"/>
@@ -628,7 +641,9 @@
       <argument type="android.net.Uri"/>
       <argument type="java.lang.String"/>
     </method>
-    <method class-name="android.content.Intent" name="getExtras" return-type="android.os.Bundle" category="INTENT"/>
+    <method class-name="android.content.Context" name="getCacheDir" type="filesystem" />
+    <method class-name="android.content.Context" name="openFileInput" type="filesystem" />
+    <method class-name="android.content.Intent" name="getExtras" return-type="android.os.Bundle" category="ipc"/>
     <method class-name="android.hardware.Camera" name="open" return-type="android.hardware.Camera" category="CAMERA"/>
     <method class-name="android.hardware.Camera" name="open" return-type="android.hardware.Camera" category="CAMERA">
       <argument type="int"/>
@@ -640,11 +655,11 @@
     <method class-name="android.hardware.SensorEventListener" name="onSensorChanged" return-type="void" category="none">
       <argument type="android.hardware.SensorEvent"/>
     </method>
-    <method class-name="android.hardware.SensorListener Deprecated" name="onAccuracyChanged" return-type="void" category="none">
+    <method class-name="android.hardware.SensorListener" name="onAccuracyChanged" return-type="void" category="none">
       <argument type="int"/>
       <argument type="int"/>
     </method>
-    <method class-name="android.hardware.SensorListener Deprecated" name="onSensorChanged" return-type="void" category="none">
+    <method class-name="android.hardware.SensorListener" name="onSensorChanged" return-type="void" category="none">
       <argument type="int"/>
       <argument type="float[]"/>
     </method>
@@ -711,16 +726,22 @@
       <argument type="int"/>
       <argument type="int"/>
     </method>
+    <method class-name="android.media.ExifInterface" name="<init>" category="picture" />
+    <method class-name="android.media.ExifInterface" name="getLatLong" category="location" />
     <method class-name="android.media.MediaRecorder" name="setAudioSource" return-type="void" category="RECORD_AUDIO">
       <argument type="int"/>
     </method>
     <method class-name="android.media.MediaRecorder" name="setVideoSource" return-type="void" category="CAMERA">
       <argument type="int"/>
     </method>
+    <method class-name="android.net.DhcpInfo" name="ipAddress" category="network" />
+    <method class-name="android.net.wifi.WifiManager" name="getDhcpInfo" category="network" />
+    <method class-name="android.os.Bundle" name="getStringArrayList" category="os" />
     <method class-name="android.os.DropBoxManager" name="getNextEntry" return-type="android.os.DropBoxManager.Entry" category="READ_LOGS">
       <argument type="java.lang.String"/>
       <argument type="long"/>
     </method>
+    <method class-name="android.os.Environment" name="getEternalStorageDirectory" category="sdcard" />
     <method class-name="android.speech.SpeechRecognizer" name="cancel" return-type="void" category="RECORD_AUDIO"/>
     <method class-name="android.speech.SpeechRecognizer" name="startListening" return-type="void" category="RECORD_AUDIO">
       <argument type="android.content.Intent"/>
@@ -738,11 +759,11 @@
     <method class-name="android.telephony.TelephonyManager" name="getVoiceMailAlphaTag" return-type="java.lang.String" category="READ_PHONE_STATE"/>
     <method class-name="android.telephony.TelephonyManager" name="getNeighboringCellInfo" return-type="java.util.List" category="ACCESS_FINE_LOCATION__or__ACCESS_COARSE_LOCATION"/>
     <method class-name="android.telephony.TelephonyManager" name="incomingCallNumber" return-type="java.lang.String" category="none"/>
-    <method class-name="android.view.OrientationListener Deprecated" name="onAccuracyChanged" return-type="void" category="none">
+    <method class-name="android.view.OrientationListener" name="onAccuracyChanged" return-type="void" category="none">
       <argument type="int"/>
       <argument type="int"/>
     </method>
-    <method class-name="android.view.OrientationListener Deprecated" name="onSensorChanged" return-type="void" category="none">
+    <method class-name="android.view.OrientationListener" name="onSensorChanged" return-type="void" category="none">
       <argument type="int"/>
       <argument type="float[]"/>
     </method>
@@ -782,10 +803,14 @@
     <method class-name="android.location.Location" name="getLatitude" return-type="android.location.Location" category="CONTENT"/>
     <method class-name="android.location.Location" name="getLongitude" return-type="android.location.Location" category="CONTENT"/>
     <method class-name="android.telephony.TelephonyManager" name="getDeviceId" return-type="java.lang.String" category="READ_PHONE_STATE"/>
+    <method class-name="java.io.File" name="<init>" return-type="java.io.File[]" category="FILE"/>
     <method class-name="java.io.File" name="listFiles" return-type="java.io.File[]" category="FILE"/>
     <method class-name="android.database.Cursor" name="getString" return-type="java.lang.String" category="CONTENT">
       <argument type="int"/>
     </method>
+    <method class-name="android.provider.Browser" name="BOOKMARKS_URI" category="browserbookmark" />
+    <method class-name="android.provider.Browser" name="HISTORY_PROJECTION" category="browserhistory" />
+    <method class-name="java.util.Random" name="<init>" category="random" />
   </sources>
   <other>
   </other>
