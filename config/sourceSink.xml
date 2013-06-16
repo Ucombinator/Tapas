@@ -64,7 +64,7 @@
       <argument type="org.apache.http.HttpRequest"/>
       <argument type="org.apache.http.protocol.HttpContext"/>
     </method>
-    <method class-name="android.os.AsyncTask" name="<init>" category="thread" />
+    <method class-name="android.os.AsyncTask" name="&lt;init&gt;" category="thread" />
     <method class-name="android.provider.Browser" name="addSearchUrl" return-type="void" category="BROWSER">
       <argument type="android.content.ContentResolver"/>
       <argument type="java.lang.String"/>
@@ -145,7 +145,7 @@
       <argument type="byte[]"/>
       <argument type="boolean"/>
     </method>
-    <method class-name="android.telephony.SmsMessage.SubmitPdu" name="<init>" category="sms" />
+    <method class-name="android.telephony.SmsMessage.SubmitPdu" name="&lt;init&gt;" category="sms" />
     <method class-name="android.util.Log" name="isLoggable" return-type="boolean" category="logging">
       <argument type="java.lang.String"/>
       <argument type="int"/>
@@ -242,7 +242,7 @@
       <argument type="int"/>
       <argument type="boolean"/>
     </method>
-    <method class-name="java.io.BufferedOutputStream" name="<init>" category="filesystem" />
+    <method class-name="java.io.BufferedOutputStream" name="&lt;init&gt;" category="filesystem" />
     <method class-name="java.io.FileOutputStream" name="FileOutputStream" return-type="java.io.FileOutputStream" category="Internet">
       <argument type="java.io.File"/>
     </method>
@@ -726,7 +726,7 @@
       <argument type="int"/>
       <argument type="int"/>
     </method>
-    <method class-name="android.media.ExifInterface" name="<init>" category="picture" />
+    <method class-name="android.media.ExifInterface" name="&lt;init&gt;" category="picture" />
     <method class-name="android.media.ExifInterface" name="getLatLong" category="location" />
     <method class-name="android.media.MediaRecorder" name="setAudioSource" return-type="void" category="RECORD_AUDIO">
       <argument type="int"/>
@@ -803,14 +803,14 @@
     <method class-name="android.location.Location" name="getLatitude" return-type="android.location.Location" category="CONTENT"/>
     <method class-name="android.location.Location" name="getLongitude" return-type="android.location.Location" category="CONTENT"/>
     <method class-name="android.telephony.TelephonyManager" name="getDeviceId" return-type="java.lang.String" category="READ_PHONE_STATE"/>
-    <method class-name="java.io.File" name="<init>" return-type="java.io.File[]" category="FILE"/>
+    <method class-name="java.io.File" name="&lt;init&gt;" return-type="java.io.File[]" category="FILE"/>
     <method class-name="java.io.File" name="listFiles" return-type="java.io.File[]" category="FILE"/>
     <method class-name="android.database.Cursor" name="getString" return-type="java.lang.String" category="CONTENT">
       <argument type="int"/>
     </method>
     <method class-name="android.provider.Browser" name="BOOKMARKS_URI" category="browserbookmark" />
     <method class-name="android.provider.Browser" name="HISTORY_PROJECTION" category="browserhistory" />
-    <method class-name="java.util.Random" name="<init>" category="random" />
+    <method class-name="java.util.Random" name="&lt;init&gt;" category="random" />
   </sources>
   <other>
   </other>
