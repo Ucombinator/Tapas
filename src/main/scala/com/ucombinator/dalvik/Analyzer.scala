@@ -3,7 +3,7 @@ package com.ucombinator.dalvik
 import java.io.{PrintStream, FileOutputStream}
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
-import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer}
+import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -13,15 +13,17 @@ object Analyzer extends App {
   var configFile: String = "config/sourceSink.xml" // set our default file location
   var className: String = null
   var methodName: String = null
+  var listCategories = false
 
   private def displayHelpMessage = {
     println("usage: analyzer [<options>] APK-file")
-    println("  -h | --help        :: print this message")
-    println("  -d | --dump        :: dump out the class definitions")
-    println("  -o | --output-file :: set the file for dump")
-    println("  -c | --class-name  :: indicate the class name to analyze")
-    println("  -m | --method-name :: indicate the method name to analyze")
-    println("  -f | --config      :: set the configuration file")
+    println("  -h | --help            :: print this message")
+    println("  -d | --dump            :: dump out the class definitions")
+    println("  -o | --output-file     :: set the file for dump")
+    println("  -c | --class-name      :: indicate the class name to analyze")
+    println("  -m | --method-name     :: indicate the method name to analyze")
+    println("  -f | --config          :: set the configuration file")
+    println("  -l | --list-categories :: list the known categories of sources and sinks")
     sys.exit
   }
 
@@ -34,6 +36,7 @@ object Analyzer extends App {
       case ("-c"  | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
       case ("-f"  | "--config") :: fn :: rest => configFile = fn ; parseOptions(rest)
       case ("-m"  | "--method-name") :: mn :: rest => methodName = mn ; parseOptions(rest)
+      case ("-l"  | "--list-categories") :: rest => listCategories = true ; parseOptions(rest)
       case fn :: rest => apkFile = fn ; parseOptions(rest)
       case Nil => Unit
       case _ => println("unrecognized option: " + args) ; displayHelpMessage
@@ -370,7 +373,18 @@ object Analyzer extends App {
 
   parseOptions(args.toList)
 
-  if (apkFile == null) displayHelpMessage
+  // first step at separting out the category information.
+  val config = new SourceSinkConfig(configFile)
+
+  if (apkFile == null) {
+    if (listCategories) {
+      println("Categories: ")
+      println("  " + config.categories.map { (sym) => sym.toString }.mkString(", "))
+      sys.exit
+    } else {
+      displayHelpMessage
+    }
+  }
 
   val apkReader = new ApkReader(apkFile)
   val classDefs = apkReader.readFile
@@ -403,7 +417,7 @@ object Analyzer extends App {
   }
 
   // Look, a real, if (very, very) simple, analyzsis
-  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(configFile, simpleCallGraph)
+  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config, simpleCallGraph)
   def printMethodsAndSources(mds: Set[MethodDef]) {
     mds foreach {
       (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name +
