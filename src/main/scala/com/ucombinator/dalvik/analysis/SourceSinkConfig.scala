@@ -101,7 +101,7 @@ class SourceSinkConfig(fn: String) {
 
   def sourceMap = _sourceMap
   def sinkMap = _sinkMap
-  def otherMap = { println("othermap: " + _otherMap.mkString(", ")) ; _otherMap }
+  def otherMap = _otherMap
   def generalMap = _sourceMap ++ _sinkMap ++ _otherMap
   def categoryMap = extractCategories(sourceMap) ++
                     extractCategories(sinkMap) ++

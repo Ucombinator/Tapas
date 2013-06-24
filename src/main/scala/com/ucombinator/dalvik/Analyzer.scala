@@ -1,9 +1,12 @@
 package com.ucombinator.dalvik
 
-import java.io.{PrintStream, FileOutputStream}
+import java.io.{PrintStream, FileOutputStream, File}
+import io.Source
+import collection.SortedSet
 import com.ucombinator.dalvik.android.ApkReader
 import com.ucombinator.dalvik.AST._
 import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
+import annotation.tailrec
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -14,19 +17,35 @@ object Analyzer extends App {
   var className: String = null
   var methodName: String = null
   var listCategories = false
+  var additionalMethods = List.empty[(String, String, String)]
+  var costSpecification = Map.empty[Symbol,Int]
+  var limitToCategories = Set.empty[Symbol]
 
   private def displayHelpMessage = {
     println("usage: analyzer [<options>] APK-file")
-    println("  -h | --help            :: print this message")
-    println("  -d | --dump            :: dump out the class definitions")
-    println("  -o | --output-file     :: set the file for dump")
-    println("  -c | --class-name      :: indicate the class name to analyze")
-    println("  -m | --method-name     :: indicate the method name to analyze")
-    println("  -f | --config          :: set the configuration file")
-    println("  -l | --list-categories :: list the known categories of sources and sinks")
+    println("  -h | --help              :: print this message")
+    println("  -d | --dump              :: dump out the class definitions")
+    println("  -o | --output-file       :: set the file for dump")
+    println("  -c | --class-name        :: indicate the class name to analyze")
+    println("  -m | --method-name       :: indicate the method name to analyze")
+    println("  -f | --config            :: set the configuration file")
+    println("  -l | --list-categories   :: list the known categories of sources and sinks")
+    println("  -g | --limit-categories  :: limit report to only contain certain categories")
+    println("  -G | --categories-file   :: limit report to categories in file")
+    println("  -a | --add-methods       :: allows adding a set of methods w/categories")
+    println("  -A | --add-method-file   :: specify a filename of additional methods w/categories")
+    println("  -s | --specify-cost      :: specifies cost by category")
+    println("  -S | --specify-cost-file :: specify a filename of costs by category")
     sys.exit
   }
 
+  private def reportError(msg: String) = {
+    println(msg)
+    println("run with --help for command syntax")
+    sys.exit
+  }
+
+  @tailrec
   private def parseOptions(args:List[String]):Unit = {
     args match {
       case ("-h"  | "--help") :: rest => displayHelpMessage
@@ -37,10 +56,357 @@ object Analyzer extends App {
       case ("-f"  | "--config") :: fn :: rest => configFile = fn ; parseOptions(rest)
       case ("-m"  | "--method-name") :: mn :: rest => methodName = mn ; parseOptions(rest)
       case ("-l"  | "--list-categories") :: rest => listCategories = true ; parseOptions(rest)
-      case fn :: rest => apkFile = fn ; parseOptions(rest)
+      case ("-g"  | "--limit-categories") :: rest => val rest2 = limitCategories(args.head, rest) ; parseOptions(rest2)
+      case ("-G"  | "--categories-file") :: fn :: rest => readCategoriesFile(fn) ; parseOptions(rest)
+      case ("-a"  | "--add-methods") :: rest => val rest2 = additionalMethods(rest) ; parseOptions(rest2)
+      case ("-A"  | "--add-method-file") :: fn :: rest => readAdditionalMethods(fn) ; parseOptions(rest)
+      case ("-s"  | "--specify-cost") :: rest => val rest2 = parseCostSpecification(rest) ; parseOptions(rest2)
+      case ("-S"  | "--specify-cost-file") :: fn :: rest => readCostSpecification(fn) ; parseOptions(rest)
+      case fn :: rest => {
+        if (apkFile == null) {
+          val f = new File(fn)
+
+          if (f.exists) {
+            if (f.isFile) {
+              if (f.canRead) {
+                apkFile = fn 
+                parseOptions(rest)
+              } else {
+                reportError(fn + " is not a readable file")
+              }
+            } else {
+              reportError(fn + " is not a file")
+            }
+          } else {
+            if (fn(0) == '-') {
+              reportError("Unrecognized option " + fn)
+            } else {
+              reportError(fn + " does not exist")
+            }
+          }
+        } else {
+          if (fn(0) == '-') {
+            reportError("Unrecognized option " + fn)
+          } else {
+            reportError("APK file is already set to " + apkFile +
+                        " and we can only process on file at a time now, so " +
+                        fn + " cannot also be processed")
+          }
+        }
+      }
       case Nil => Unit
       case _ => println("unrecognized option: " + args) ; displayHelpMessage
     }
+  }
+
+  private def readAdditionalMethods(fn:String): Unit = {
+    def finish(classMethod: String, category: String): Unit = {
+      val canonicalClassMethod = classMethod.trim.replaceAll("[.$#:]", "/")
+      val lastSlashIndex = canonicalClassMethod.lastIndexOf("/")
+      if (lastSlashIndex == -1) {
+        println("unable to determine className/methodName split: " + classMethod)
+        displayHelpMessage
+      }
+      val className = "L" + canonicalClassMethod.substring(0, lastSlashIndex) + ";"
+      val methodName = canonicalClassMethod.substring(lastSlashIndex+1, canonicalClassMethod.length)
+      additionalMethods = (className, methodName, category.trim) :: additionalMethods
+    }
+    val f = new File(fn)
+    if (!f.exists || !f.isFile || !f.canRead) {
+      println("Unable to read cost specification file: " + fn)
+      displayHelpMessage
+    }
+    val src = Source.fromFile(f)
+    val lns = src.getLines
+    while(lns.hasNext) {
+      val ln = lns.next
+      val hashIndex = ln.indexOf('#')
+      val noCommentLn = if (hashIndex == -1) ln else ln.substring(0, hashIndex)
+      val noSpaceLn = noCommentLn.trim
+      if (noSpaceLn.length > 0) {
+        val commaIndex = noSpaceLn.indexOf(noSpaceLn)
+        if (commaIndex == -1) {
+          val reducedSpaceLn = noSpaceLn.replaceAll("\\s+", " ")
+          val spaceIndex = reducedSpaceLn.indexOf(" ")
+          if (spaceIndex == -1) {
+            println("please provide a single category and a cost on each line: " + ln)
+            displayHelpMessage
+          } else {
+            finish(reducedSpaceLn.substring(0, spaceIndex),
+                   reducedSpaceLn.substring(spaceIndex + 1, reducedSpaceLn.length))
+          }
+        } else {
+          finish(noSpaceLn.substring(0, commaIndex).trim,
+                 noSpaceLn.substring(commaIndex + 1, noSpaceLn.length))
+        }
+      }
+    }
+    src.close
+  }
+
+  private def readCostSpecification(fn:String): Unit = {
+    val f = new File(fn)
+    if (!f.exists || !f.isFile || !f.canRead) {
+      println("Unable to read cost specification file: " + fn)
+      displayHelpMessage
+    }
+    val src = Source.fromFile(f)
+    val lns = src.getLines
+    while(lns.hasNext) {
+      val ln = lns.next
+      val hashIndex = ln.indexOf('#')
+      val noCommentLn = if (hashIndex == -1) ln else ln.substring(0, hashIndex)
+      val noSpaceLn = noCommentLn.trim
+      if (noSpaceLn.length > 0) {
+        val commaIndex = noSpaceLn.indexOf(noSpaceLn)
+        if (commaIndex == -1) {
+          val reducedSpaceLn = noSpaceLn.replaceAll("\\s+", " ")
+          val spaceIndex = reducedSpaceLn.indexOf(" ")
+          if (spaceIndex == -1) {
+            println("please provide a single category and a cost on each line: " + ln)
+            displayHelpMessage
+          } else {
+            costSpecification += Symbol(reducedSpaceLn.substring(0, spaceIndex)) -> reducedSpaceLn.substring(spaceIndex + 1, reducedSpaceLn.length).toInt
+          }
+        } else {
+          costSpecification += Symbol(noSpaceLn.substring(0, commaIndex).trim) -> noSpaceLn.substring(commaIndex + 1, noSpaceLn.length).toInt
+        }
+      }
+    }
+    src.close
+  }
+
+  private def readCategoriesFile(fn:String): Unit = {
+    val f = new File(fn)
+    if (!f.exists || !f.isFile || !f.canRead) {
+      println("Unable to read category file: " + fn)
+      displayHelpMessage
+    }
+    val src = Source.fromFile(f)
+    val lns = src.getLines
+    while(lns.hasNext) {
+      val ln = lns.next
+      val hashIndex = ln.indexOf('#')
+      val noCommentLn = if (hashIndex == -1) ln else ln.substring(0, hashIndex)
+      val noSpaceLn = noCommentLn.trim
+      if (noSpaceLn.length > 0)
+        limitToCategories += Symbol(noSpaceLn)
+    }
+    src.close
+  }
+
+  private def additionalMethods(args:List[String]):List[String] = {
+    println("running additional methods: " + args.mkString(", "))
+    def s0(args:List[String]): List[String] = {
+      args match {
+        case "{" :: rest => s1(rest)
+        case str :: rest => {
+          val isStart = str(0) == '{'
+          val isEnd = str(str.length - 1) == '}'
+          val commaOffset = str.indexOf(',')
+          val beforeComma = str.substring((if (isStart) 1 else 0), (if (commaOffset == -1) if (isEnd) (str.length-1) else str.length else commaOffset))
+          val afterComma = if (commaOffset != -1) str.substring(commaOffset+1,(if (isEnd) str.length - 1 else str.length)) else null
+          val homogenizedBefore = beforeComma.replaceAll("[.$#:]", "/")
+          val lastSlash = homogenizedBefore.lastIndexOf("/")
+          if (lastSlash == -1) { println("unable to parse additional methods argument: " + args) ; displayHelpMessage }
+          val className = homogenizedBefore.substring(0, lastSlash)
+          val methodName = homogenizedBefore.substring(lastSlash + 1, homogenizedBefore.length)
+          if (afterComma == null || afterComma.trim.length == 0) {
+            if (isStart && isEnd) {
+              println("please supply a category with each additional method: " + str) ; displayHelpMessage
+            } else {
+              if (isStart)
+                s2(rest, className, methodName)
+              else
+                s3(rest, className, methodName)
+            }
+          } else {
+            additionalMethods = ("L" + className + ";", methodName, afterComma) :: additionalMethods
+            if ((isStart && isEnd) || !isStart)
+              rest
+            else
+              s1(rest)
+          }
+        }
+        case _ => println("unable to parse additional method argument: " + args) ; displayHelpMessage
+      }
+    }
+    def s1(args:List[String]): List[String] = {
+      args match {
+        case "}" :: rest => rest
+        case str :: rest => {
+          val isEnd = str(str.length - 1) == '}'
+          val commaOffset = str.indexOf(',')
+          val beforeComma = str.substring(0, (if (commaOffset == -1) if (isEnd) (str.length-1) else str.length else commaOffset))
+          val afterComma = if (commaOffset != -1) str.substring(commaOffset+1, (if (isEnd) str.length - 1 else str.length)) else null
+          val homogenizedBefore = beforeComma.replaceAll("[.$#:]", "/")
+          val lastSlash = homogenizedBefore.lastIndexOf("/")
+          if (lastSlash == -1) { println("unable to parse additional methods argument: " + args) ; displayHelpMessage }
+          val className = homogenizedBefore.substring(0, lastSlash)
+          val methodName = homogenizedBefore.substring(lastSlash + 1, homogenizedBefore.length)
+          if (afterComma == null || afterComma.trim.length == 0) {
+            s2(rest, className, methodName)
+          } else {
+            additionalMethods = ("L" + className + ";", methodName, afterComma) :: additionalMethods
+            if (isEnd)
+              rest
+            else
+              s1(rest)
+          }
+        }
+        case _ => println("unable to parse additional metod argument: " + args) ; displayHelpMessage
+      }
+    }
+    def s2(args:List[String], className: String, methodName: String): List[String] = {
+      args match {
+        case "," :: rest => s2(rest, className, methodName)
+        case str :: rest => {
+          val isEnd = str(str.length - 1) == '}'
+          val category = if (isEnd) str.substring(0, str.length - 1) else str
+          additionalMethods = ("L" + className + ";", methodName, category) :: additionalMethods
+          if (isEnd)
+            rest
+          else
+            s1(rest)
+        }
+        case _ => println("unable to parse additional metod argument: " + args) ; displayHelpMessage
+      }
+    }
+    def s3(args:List[String], className: String, methodName: String): List[String] = {
+      args match {
+        case "," :: rest => s3(rest, className, methodName)
+        case str :: rest => {
+          additionalMethods = ("L" + className + ";", methodName, str) :: additionalMethods
+          rest
+        }
+        case _ => println("unable to parse additional metod argument: " + args) ; displayHelpMessage
+      }
+    }
+
+    s0(args)
+  }
+
+  private def parseCostSpecification(args:List[String]):List[String] = {
+    def s0(args:List[String]): List[String] = {
+      args match {
+        case "{" :: rest => s1(rest)
+        case str :: rest => {
+          val isStart = str(0) == '{'
+          val isEnd = str(str.length - 1) == '}'
+          val commaOffset = str.indexOf(',')
+          val category = Symbol(str.substring((if (isStart) 1 else 0), (if (commaOffset == -1) if (isEnd) (str.length-1) else str.length else commaOffset)))
+          val afterComma = if (commaOffset != -1) str.substring(commaOffset+1,(if (isEnd) str.length - 1 else str.length)) else null
+          if (afterComma == null || afterComma.trim.length == 0) {
+            if (isStart && isEnd) {
+              println("please supply a cost with each category: " + str) ; displayHelpMessage
+            } else {
+              if (isStart)
+                s2(rest, category)
+              else
+                s3(rest, category)
+            }
+          } else {
+            val cost = afterComma.toInt
+            costSpecification += category -> cost
+            if ((isStart && isEnd) || !isStart)
+              rest
+            else
+              s1(rest)
+          }
+        }
+        case _ => println("unable to parse cost specitfication argument: " + args) ; displayHelpMessage
+      }
+    }
+    def s1(args:List[String]): List[String] = {
+      args match {
+        case "}" :: rest => rest
+        case str :: rest => {
+          val isEnd = str(str.length - 1) == '}'
+          val commaOffset = str.indexOf(',')
+          val category = Symbol(str.substring(0, (if (commaOffset == -1) if (isEnd) (str.length-1) else str.length else commaOffset)))
+          val afterComma = if (commaOffset != -1) str.substring(commaOffset+1, (if (isEnd) str.length - 1 else str.length)) else null
+          if (afterComma == null || afterComma.trim.length == 0) {
+            s2(rest, category)
+          } else {
+            val cost = afterComma.toInt
+            costSpecification += category -> cost
+            if (isEnd)
+              rest
+            else
+              s1(rest)
+          }
+        }
+        case _ => println("unable to parse cost specitfication argument: " + args) ; displayHelpMessage
+      }
+    }
+    def s2(args:List[String], category: Symbol): List[String] = {
+      args match {
+        case "," :: rest => s2(rest, category)
+        case str :: rest => {
+          val isEnd = str(str.length - 1) == '}'
+          val cost = (if (isEnd) str.substring(0, str.length - 1) else str).toInt
+          costSpecification += category -> cost
+          if (isEnd)
+            rest
+          else
+            s1(rest)
+        }
+        case _ => println("unable to parse cost specitfication argument: " + args) ; displayHelpMessage
+      }
+    }
+    def s3(args:List[String], category: Symbol): List[String] = {
+      args match {
+        case "," :: rest => s3(rest, category)
+        case str :: rest => {
+          val cost = str.toInt
+          costSpecification += category -> cost
+          rest
+        }
+        case _ => println("unable to parse cost specitfication argument: " + args) ; displayHelpMessage
+      }
+    }
+
+    s0(args)
+  }
+
+  private def limitCategories(cmd: String, args:List[String]):List[String] = {
+    def s0(as:List[String]): List[String] = {
+      as match {
+        case "{" :: rest => s1(rest)
+        case str :: rest => {
+          val isStart = str(0) == '{'
+          val isEnd = str(str.length - 1) == '}'
+          val category = Symbol(str.substring((if (isStart) 1 else 0), (if (isEnd) (str.length-1) else str.length)))
+          limitToCategories += category
+          if ((isStart && isEnd) || !isStart)
+            rest
+          else
+            s1(rest)
+        }
+        case Nil => { reportError(cmd + " option requires one or more categories be listed") }
+        case _ => { reportError("unable to parse argument to " + cmd + ": " +
+                                as.head + " in " + args.mkString(", ")) }
+      }
+    }
+    def s1(as:List[String]): List[String] = {
+      as match {
+        case "}" :: rest => rest
+        case str :: rest => {
+          val isEnd = str(str.length - 1) == '}'
+          val category = Symbol(str.substring(0, (if (isEnd) (str.length-1) else str.length)))
+          limitToCategories += category
+          if (isEnd)
+            rest
+          else
+            s1(rest)
+        }
+        case Nil => { reportError(cmd + " end of arguments found before matching }") }
+        case _ => { reportError("unable to parse argument to " + cmd + ": " +
+                                as.head + " in " + args.mkString(", ")) }
+      }
+    }
+
+    s0(args)
   }
 
   private def javaTypeToName(t: JavaType): String = {
@@ -375,6 +741,7 @@ object Analyzer extends App {
 
   // first step at separting out the category information.
   val config = new SourceSinkConfig(configFile)
+  config.addMethods(additionalMethods)
 
   if (apkFile == null) {
     if (listCategories) {
@@ -417,7 +784,8 @@ object Analyzer extends App {
   }
 
   // Look, a real, if (very, very) simple, analyzsis
-  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config, simpleCallGraph)
+  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config,
+                          simpleCallGraph, limitToCategories, costSpecification)
   def printMethodsAndSources(mds: Set[MethodDef]) {
     mds foreach {
       (md) => println("  " + javaTypeToName(md.method.classType) + "." + md.name +
@@ -427,15 +795,28 @@ object Analyzer extends App {
                    }))
     }
   }
+  def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDef)]) {
+    mds foreach {
+      (a) => println("  " + a._1 + "\t" + javaTypeToName(a._2.method.classType) + "." + a._2.name +
+               (a._2.sourceLocation match {
+                  case Some((fn,line,pos)) => " [" + fn + " at line: " + line + " pos: " + pos + "]"
+                  case None => ""
+                  }))
+    }
+  }
   wrapOutput {
-    println("Methods that call sources (non-exhaustive): ")
-    printMethodsAndSources(sourcesAndSinks.sources)
-    println
-    println("Methods that call sinks (non-exhaustive): ")
-    printMethodsAndSources(sourcesAndSinks.sinks)
-    println
-    println("Methods that call other interesting methods (non-exhaustive): ")
-    printMethodsAndSources(sourcesAndSinks.other)
+    /* setting this aside in favor of the cost-sourted analysis */
+    // println("Methods that call sources (non-exhaustive): ")
+    // printMethodsAndSources(sourcesAndSinks.sources)
+    // println
+    // println("Methods that call sinks (non-exhaustive): ")
+    // printMethodsAndSources(sourcesAndSinks.sinks)
+    // println
+    // println("Methods that call other interesting methods (non-exhaustive): ")
+    // printMethodsAndSources(sourcesAndSinks.other)
+    // println
+    println("Sorted methods by cost: ")
+    printMethodsWithCostAndSources(sourcesAndSinks.methodCosts)
     println
   }
 }

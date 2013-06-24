@@ -2,6 +2,7 @@ package com.ucombinator.dalvik.analysis
 
 import xml.{XML, NodeSeq}
 import com.ucombinator.dalvik.AST._
+import collection.SortedSet
 
 /** A simple analyzer that builds sets of methods that are called by one of the
   * source, sink, or other intersting methods.  This class makes use of the
@@ -19,7 +20,9 @@ import com.ucombinator.dalvik.AST._
   * @param clazzes an Array of ClassDef objects that represents all the know
   *                classes in the program to be analyzed.
   */
-class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig, simpleCallGraph: SimpleMethodCallGraph) {
+class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
+        simpleCallGraph: SimpleMethodCallGraph,
+        cs: Set[Symbol], costs: Map[Symbol, Int]) {
 
   // TODO: to finish this we need to:
   // a) have a version of this that will take a set of categories
@@ -29,25 +32,86 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig, simpleCallGraph: Simpl
   // d) have it take costs for each of the categories
   // e) have it return a sorted list of costs and method defs
 
-  private def buildSet(m: Map[String,SourceSinkConfig#ClassConfig],
+  private def buildSet(m: Map[String,ClassConfig],
                        classMap: Map[String,ClassDefProxy]):
     Set[MethodDef] = {
     m.foldLeft(Set.empty[MethodDef]) {
-      (s, a) => a._2.methods.foldLeft(s) {
-        (s, mc) => {
-          val className = a._1
+      (s, a) => buildSetForClassConfig(a._1, 
+                  (if (cs == null || cs.isEmpty)
+                     a._2.methods
+                   else
+                     a._2.methodsForCategories(cs)),
+                  classMap, s)
+    }
+  }
+
+  private def buildSetForClassConfig(className: String,
+                                     ms: Set[MethodConfig],
+                                     classMap: Map[String,ClassDefProxy],
+                                     s: Set[MethodDef]):
+    Set[MethodDef] = {
+    ms.foldLeft(s) {
+      (s, mc) => {
+        if (classMap isDefinedAt className) {
+          val cdp = classMap(className)
           val methodName = mc.name
-          if (classMap isDefinedAt className) {
-            val cdp = classMap(className)
-            if (cdp.methodMap isDefinedAt methodName)
-              cdp.methodMap(methodName).calledBy.foldLeft(s) {
-                (s, mdp) => if (mdp.methodDef == null) s else s + mdp.methodDef
-              }
-            else 
-              s
-          } else {
+          if (cdp.methodMap isDefinedAt methodName)
+            cdp.methodMap(methodName).calledBy.foldLeft(s) {
+              (s, mdp) => if (mdp.methodDef == null) s else s + mdp.methodDef
+            }
+          else 
             s
+        } else {
+          s
+        }
+      }
+    }
+  }
+
+  private def getCost(s: Symbol): Int = if (costs isDefinedAt s) costs(s) else 5
+
+  private def buildCostsSet(m: Map[String, ClassConfig],
+                            classMap: Map[String, ClassDefProxy]):
+    SortedSet[(Int,MethodDef)] = {
+    var mdm = m.foldLeft(Map.empty[MethodDef, Int]) {
+                (mdm, a) => buildCostsSetForClassConfig(a._1,
+                              (if (cs == null || cs.isEmpty)
+                                 a._2.methods
+                               else
+                                 a._2.methodsForCategories(cs)),
+                              classMap, mdm)
+              }
+    mdm.foldLeft(SortedSet.empty[(Int,MethodDef)]) { (s, a) => s + ((a._2, a._1)) }
+  }
+
+  private def buildCostsSetForClassConfig(className: String,
+                                          ms: Set[MethodConfig],
+                                          classMap: Map[String, ClassDefProxy],
+                                          mdm: Map[MethodDef,Int]):
+    Map[MethodDef, Int] = {
+    ms.foldLeft(mdm) {
+      (mdm, mc) => {
+        if (classMap isDefinedAt className) {
+          val cdp = classMap(className)
+          val methodName = mc.name
+          if (cdp.methodMap isDefinedAt methodName) {
+            cdp.methodMap(methodName).calledBy.foldLeft(mdm) {
+              (mdm, mdp) => if (mdp.methodDef == null) {
+                              mdm
+                            } else {
+                              val md = mdp.methodDef
+                              if (mdm isDefinedAt md) {
+                                mdm + (md -> (mdm(md) + getCost(mc.category)))
+                              } else {
+                                mdm + (md -> getCost(mc.category))
+                              }
+                            }
+            }
+          } else {
+            mdm
           }
+        } else {
+          mdm
         }
       }
     }
@@ -56,6 +120,7 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig, simpleCallGraph: Simpl
   private var _sources = buildSet(ssc.sourceMap, simpleCallGraph.classMap)
   private var _sinks   = buildSet(ssc.sinkMap, simpleCallGraph.classMap)
   private var _other   = buildSet(ssc.otherMap, simpleCallGraph.classMap)
+  private var _methodCosts = buildCostsSet(ssc.generalMap, simpleCallGraph.classMap)
 
   /** Accessor to return the Set of MethodDefs that call source methods.
     *
@@ -75,4 +140,6 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig, simpleCallGraph: Simpl
     * @returns the set of methods that call known other interesting methods.
     */
   def other   = _other
+
+  def methodCosts = _methodCosts
 }

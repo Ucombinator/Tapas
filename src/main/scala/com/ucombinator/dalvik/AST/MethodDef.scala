@@ -27,7 +27,7 @@ class Method(var classType:JavaType, val prototype:Prototype, val name:String) {
   }
 }
 
-class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) {
+class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) extends Comparable[MethodDef] {
   val name = method.name
 
   val visibility = if ((accessFlags & AccessFlags.ACC_PUBLIC) != 0) PublicVisibilityAttr
@@ -69,6 +69,12 @@ class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) {
       case Some(insn) => Some((insn.sourceInfo.fn, insn.sourceInfo.line, insn.sourceInfo.position))
       case None => None
     }
+  }
+
+  def compareTo(o: MethodDef) = {
+    val fqn = method.className + "::" + name
+    val ofqn = o.method.className + "::" + o.name
+    fqn.compareTo(ofqn)
   }
 }
 
