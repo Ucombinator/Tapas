@@ -4,7 +4,7 @@ SCALA_VERSION=`scala -e "print(scala.util.Properties.versionString)" | sed "s/ve
 CLASSPATH="target/scala-${SCALA_VERSION}/classes"
 
 if (! [ -e $CLASSPATH ]); then 
-  SCALA_VERSION=`echo $SCALA_VERSION | sed "s/\([0-9]\+\.[0-9]\+\).*/\1/"`
+  SCALA_VERSION=`echo $SCALA_VERSION | sed 's/\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/'`
   CLASSPATH="target/scala-${SCALA_VERSION}/classes"
 fi
 
