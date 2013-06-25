@@ -21,9 +21,9 @@ tool](http://www.scala-sbt.org "SBT") for Scala.  From the Tapas directory:
 $ sbt
 [info] ...
 > 
-'''
+```
 
-At the prompt, you can compile and run the project with ```run''':
+At the prompt, you can compile and run the project with ```run```:
 
 ```
 > run
@@ -44,7 +44,7 @@ usage: analyzer [<options>] APK-file
   -S | --specify-cost-file :: specify a filename of costs by category
 [success] Total time: 7 s, completed Jun 24, 2013 2:25:21 PM
 >
-'''
+```
 
 To have the analyzer analyze a file, simple provide the APK file along with the run line:
 
@@ -56,7 +56,7 @@ Sorted methods by cost:
   5	com.invincea.draw.MyDrawService.onDestroy [MyDrawService.java at line: 32 pos: 0]
 
 [success] Total time: 2 s, completed Jun 24, 2013 2:30:23 PM
-'''
+```
 
 Configuring Sematic Grep
 ------------------------
@@ -70,36 +70,37 @@ methods and categories (see Semantic Grep Options below).
 Semantic Grep Options
 ---------------------
 
-- ```-h''' or ```--help''' : prints the help message listing all the options.
-- ```-d''' or ```--dump''' : dumps the Dalvik bytecode in assembly language
+- ```-h``` or ```--help``` : prints the help message listing all the options.
+- ```-d``` or ```--dump``` : dumps the Dalvik bytecode in assembly language
   form for each method defined in the supplied APK file.  The output is dumped
   to standard out unless an output file is specified.
-- ```-o''' or ```--output-file''' : specifies the output file to push output of
-  analysis and dump (if ```--dump''' is used).  If left unspecified, output is
+- ```-o``` or ```--output-file``` : specifies the output file to push output of
+  analysis and dump (if ```-d``` or ```--dump``` is used).  If left unspecified, output is
   sent to standard out.
-- ```-c''' or ```--class-name''' : *Deprecated* specifies a class name to
+- ```-c``` or ```--class-name``` : **Deprecated** specifies a class name to
   analyze.  This causes the analyzer to perform a different analysis instead of
   semantic grep.
-- ```-m''' or ```--method-name''' : *Deprecated* indicate the method name to
+- ```-m``` or ```--method-name``` : **Deprecated** indicate the method name to
   analyze.  This causes the analyzer to perform a different analysis from
   sematic grep.
-- ```-f''' or ```--config''' : specifies a configuration file to use in place
+- ```-f``` or ```--config``` : specifies a configuration file to use in place
   of the default configuration file in
-  ```config/sourceSink.xml'''sourceSink.xml'''.
-- ```-l''' or ```--list-categories''' : when no APK file is specified, this
+  ```config/sourceSink.xml```
+
+- ```-l``` or ```--list-categories``` : when no APK file is specified, this
   option lists the known categories of flagged methods in the current
   configuration file and for any additional methods provided by the user.
-- ```-g''' or ```--limit-categories''' : limits the report to only contain
+- ```-g``` or ```--limit-categories``` : limits the report to only contain
   flagged methods from the given categories.  Categories are space separated,
   and if more then one category is specified, then categories should be
   surrounded with curly braces.  For example:
      ```
      > run --limit-categories { ipc filesystem } <APK file>
-     '''
-- ```-G''' or ```--categories-file''' : similar to ```-g''' or
-  ```-limit-categories''', except that categories are specified in a text file
-  (one category per line) with ```#''' used to indicate comments
-- ```-a''' or ```--add-methods''' : allows adding a set of methods with
+     ```
+- ```-G``` or ```--categories-file``` : similar to ```-g``` or
+  ```-limit-categories```, except that categories are specified in a text file
+  (one category per line) with ```#``` used to indicate comments
+- ```-a``` or ```--add-methods``` : allows adding a set of methods with
   categories at the command line to flag in addition to those already specified
   in a configuration file.  This allows extra methods to be listed for analyzing
   a particular application.  The class and method name are separated from the
@@ -107,20 +108,20 @@ Semantic Grep Options
   curly braces with spaces between each method and category pair.  For example:
      ```
      > run --add-methods { java.io.File.delete, filesystem java.io.File.open, filesystem } <APK file>
-     '''
-- ```-A''' or ```--add-method-file''' : similar to ```-a''' or
-  ```-add-methods''' except methods and categories are listed in a file.  Each
+     ```
+- ```-A``` or ```--add-method-file``` : similar to ```-a``` or
+  ```-add-methods``` except methods and categories are listed in a file.  Each
   line contains a single method and category, either separated by space or comma.
-- ```-s''' or ```--specify-cost''' : specifies the cost to associate with each
+- ```-s``` or ```--specify-cost``` : specifies the cost to associate with each
   category of flagged method.  The category is listed first, then the cost,
   separated by a comma.  If more than one is specified, they are space separated
   and should be surrounded by curly braces.  For example,
      ```
      > run --specify-cost { filesystem,10 log,1 } <APK file>
-     '''
+     ```
   Any category that does not have an associated cost is assigned the default
   cost of 5.
-- ```-S''' or ```--specify-cost-file''' : similar to ```-s''' or
-  ```--specify-cost''', except the costs are specified in a file.  Each line in
+- ```-S``` or ```--specify-cost-file``` : similar to ```-s``` or
+  ```--specify-cost```, except the costs are specified in a file.  Each line in
   the file has a category and a cost, either separated by comma or space.
 
