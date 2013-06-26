@@ -123,8 +123,18 @@ class MethodDefProxy(val methodDef: MethodDef, val method: Method) {
 class SimpleMethodCallGraph(classes: Array[ClassDef]) {
   private def javaTypeToName(jt: JavaType) : String = {
     jt match {
+      case VoidType => "void"
+      case BooleanType => "boolean"
+      case ByteType => "byte"
+      case ShortType => "short"
+      case CharType => "char"
+      case IntType => "int"
+      case LongType => "long"
+      case FloatType => "float"
+      case DoubleType => "double"
       case cd: ClassDef     => cd.name
       case at: AbstractType => at.nameOf
+      case ar: ArrayType    => "Array[" + javaTypeToName(ar.typeOf) + "]"
       case _                => println("Unable to turn " + jt + " into a name") ; null
     }
   }
