@@ -81,7 +81,7 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
                                  a._2.methodsForCategories(cs)),
                               classMap, mdm)
               }
-    mdm.foldLeft(SortedSet.empty[(Int,MethodDef)]) { (s, a) => s + ((a._2, a._1)) }
+    mdm.foldLeft(SortedSet.empty[(Int,MethodDef)](implicitly[Ordering[(Int,MethodDef)]].reverse)) { (s, a) => s + ((a._2, a._1)) }
   }
 
   private def buildCostsSetForClassConfig(className: String,

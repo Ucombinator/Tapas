@@ -815,7 +815,7 @@ object Analyzer extends App {
     // println("Methods that call other interesting methods (non-exhaustive): ")
     // printMethodsAndSources(sourcesAndSinks.other)
     // println
-    println("Sorted methods by cost: ")
+    println("Methods that call sources or sinks (higher numbers indicate more hits): ")
     printMethodsWithCostAndSources(sourcesAndSinks.methodCosts)
     println
   }
