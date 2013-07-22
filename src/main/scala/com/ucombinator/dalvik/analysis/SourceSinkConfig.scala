@@ -86,7 +86,6 @@ class SourceSinkConfig(fn: String) {
   def addMethods(ms: List[(String,String,String)]) = {
     ms foreach {
       (m) => {
-        println("adding method: " + m)
         val className = m._1
         if (_otherMap isDefinedAt m._1) {
           _otherMap(m._1).addMethod(m._2, m._3)

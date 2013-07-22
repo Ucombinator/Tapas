@@ -196,7 +196,6 @@ object Analyzer extends App {
   }
 
   private def additionalMethods(args:List[String]):List[String] = {
-    println("running additional methods: " + args.mkString(", "))
     def s0(args:List[String]): List[String] = {
       args match {
         case "{" :: rest => s1(rest)
@@ -262,7 +261,8 @@ object Analyzer extends App {
         case "," :: rest => s2(rest, className, methodName)
         case str :: rest => {
           val isEnd = str(str.length - 1) == '}'
-          val category = if (isEnd) str.substring(0, str.length - 1) else str
+          val commaOffset = str.indexOf(',')
+          val category = if (isEnd || commaOffset != -1) str.substring(0,if (isEnd) str.length - 1 else commaOffset) else str
           additionalMethods = ("L" + className + ";", methodName, category) :: additionalMethods
           if (isEnd)
             rest
@@ -276,7 +276,10 @@ object Analyzer extends App {
       args match {
         case "," :: rest => s3(rest, className, methodName)
         case str :: rest => {
-          additionalMethods = ("L" + className + ";", methodName, str) :: additionalMethods
+          val isEnd = str(str.length - 1) == '}'
+          val commaOffset = str.indexOf(',')
+          val category = if (isEnd || commaOffset != -1) str.substring(0,if (isEnd) str.length - 1 else commaOffset) else str
+          additionalMethods = ("L" + className + ";", methodName, category) :: additionalMethods
           rest
         }
         case _ => println("unable to parse additional metod argument: " + args) ; displayHelpMessage
@@ -755,9 +758,10 @@ object Analyzer extends App {
 
   val apkReader = new ApkReader(apkFile)
   val classDefs = apkReader.readFile
-  val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
 
   if (dump) wrapOutput { dumpClassDefs(classDefs) }
+
+  val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
 
   if (className != null && methodName != null) {
     wrapOutput {

@@ -140,12 +140,13 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
   }
 
   private var _classMap = classes.foldLeft(Map.empty[String,ClassDefProxy]) {
-    (map, clazz) =>
+    (map, clazz) => {
       map + (clazz.name ->
              new ClassDefProxy(clazz,
                clazz.methods.foldLeft(Map.empty[String,MethodDefProxy]) {
                  (map, method) => map + (method.name -> new MethodDefProxy(method))
                }))
+      }
     }
   
   protected def addMethod(methodProxy : MethodDefProxy)(calledMethod: Method) {
