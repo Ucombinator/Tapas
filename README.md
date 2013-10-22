@@ -46,6 +46,9 @@ usage: analyzer [<options>] APK-file
 >
 ```
 
+If you run into problems during the compilation process, see the "Debugging
+Compilation Problems" section at the end fo this README.
+
 To have the analyzer analyze a file, simple provide the APK file along with the run line:
 
 ```
@@ -124,4 +127,27 @@ Semantic Grep Options
 - ```-S``` or ```--specify-cost-file``` : similar to ```-s``` or
   ```--specify-cost```, except the costs are specified in a file.  Each line in
   the file has a category and a cost, either separated by comma or space.
+
+Debugging Compilation Problems
+-------------------------------
+
+Occasionally ```sbt``` has difficulty building, particularly the first time
+```sbt``` is used to compile the project.  The core problem is that, by
+default, ```sbt``` is not configured with enough permanent generation space in
+the Java garbage collector, and as a result cannot compile its own compilation
+package, which it needs before it can compile the Tapas source code.  This can
+be worked around by setting the ```SBT_OPTS``` environment variable to increase
+the amount of permanent generation space.
+
+In ```bash``` and related shells this can be set as:
+
+```
+export SBT_OPTS="-XX:MaxPermSize=256m -Xmx2048m"
+```
+
+In ```csh``` and related shells this can be set as:
+
+```
+setenv SBT_OPTS "-XX:MaxPermSize=256m -Xmx2048m"
+````
 
