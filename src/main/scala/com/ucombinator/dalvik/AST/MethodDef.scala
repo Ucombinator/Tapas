@@ -19,12 +19,9 @@ class Method(var classType:JavaType, val prototype:Prototype, val name:String) {
     case _                => throw new Exception("Unrecognized JavaType: " + t)
   }
 
-  def className: String = classType match {
-    case at: AbstractType => at.nameOf
-    case ar: ArrayType    => "Array[" + buildTypeName(ar.typeOf) + "]"
-    case cd: ClassDef     => cd.name
-    case _                => throw new Exception("Expected class or array type instead of " + classType)
-  }
+  def className = classType.toS
+
+  def fullyQualifiedName = className + "." + name
 }
 
 class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) extends Comparable[MethodDef] {

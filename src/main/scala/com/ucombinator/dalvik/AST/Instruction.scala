@@ -1,5 +1,8 @@
 package com.ucombinator.dalvik.AST
 
+import annotation.tailrec
+import language.implicitConversions
+
 // http://www.milk.com/kodebase/dalvik-docs-mirror/docs/dalvik-bytecode.html
 
 class VarInfo(val registerNum: Long, val name: String, var varType: JavaType,
@@ -12,12 +15,94 @@ class SourceInfo(val position: Long, val line: Long, val fn: String,
 class DebugInfo(val lineStart: Long, val parameterNames: Array[String],
   val debugTable: Map[Long,SourceInfo])
 
+
+
 abstract class Instruction {
   var sourceInfo: SourceInfo = null
+
+  protected def getInstructionName: String = {
+    val name = this.getClass.getSimpleName
+    val len = name.length
+    @tailrec
+    def convert(i: Int, addedSlash: Boolean, str: String): String = {
+      if (i == len) {
+        str
+      } else {
+        val ch = name(i)
+        if (ch == 'F' && i+4 <= len && name.substring(i,i+4) == "From") {
+          convert(i + 4, true, str + "/from")
+        } else if (ch == 'R' && i+5 <= len && name.substring(i,i+5) == "Range") {
+          convert(i + 5, true, str + "/range")
+        } else if (ch == 'H' && i+4 <= len && name.substring(i,i+4) == "High") {
+          convert(i + 4, true, str + "/high")
+        } else if (ch == 'J' && i+5 <= len && name.substring(i,i+5) == "Jumbo") {
+          convert(i + 5, true, str + "/jumbo")
+        } else if (ch == 'L' && i+3 <= len && name.substring(i,i+3) == "Lit") {
+          convert(i + 3, true, str + "/lit")
+        } else if (ch.isDigit && !addedSlash) {
+          convert(i+1, true, str + "/" + ch)
+        } else if (ch.isUpper) {
+          convert(i + 1, addedSlash,
+              (if (i == 0) str + ch.toLower else str + "-" + ch.toLower))
+        } else if (ch == '$') {
+          convert(i+1, addedSlash, str)
+        } else {
+          convert(i+1, addedSlash, str + ch)
+        }
+      }
+    }
+    convert(0,false,"")
+  }
+
+  protected def getParameters: Array[(String, String, Object)] =
+    this.getClass.getDeclaredFields map { (fld) =>
+      fld.setAccessible(true)
+      (fld.getType.getSimpleName, fld.getName, fld.get(this))
+    }
+
+  protected def convertParameter(info: (String, String, Object)): String = {
+    info._1 match {
+      case "byte" | "short" | "int" | "long" => "v" + info._3
+      case "byte[]" => "{v" + info._3.asInstanceOf[Array[Byte]].mkString(", v") + "}"
+      case "int[]" => "{" + info._3.asInstanceOf[Array[Int]].mkString(", ") + "}"
+      case "short[]" => "{" + info._3.asInstanceOf[Array[Short]].mkString(", ") + "}"
+      case "String" => "\"" + info._3.toString + "\""
+      case "Method" => info._3.asInstanceOf[Method].fullyQualifiedName
+      case "JavaType" => info._3.asInstanceOf[JavaType].toS
+      case "Field" => info._3.asInstanceOf[Field].fullyQualifiedName
+      case _ => info.toString
+    }
+  }
+
+  protected def rangeToVarRef(A:Short, C:Int):String = {
+    val N = A + C - 1
+    if (C == N) "{v" + C + "}" else "{v" + C + " .. v" + N + "}"
+  }
+
+  protected def toSInvokeRanged(): String = {
+    val instrName = getInstructionName
+    val fields = getParameters
+    instrName + " " + rangeToVarRef(fields(1)._3.toString.toShort, fields(0)._3.toString.toInt) +
+      " " + convertParameter(fields(2))
+  }
+
+  protected def toSLastRaw(): String = {
+    val instrName = getInstructionName
+    val params = getParameters
+    val fields = params.take(params.length - 1)
+    val last = params.last
+    instrName + " " + fields.map(convertParameter).toString + ", " + last._3
+  }
+
+  def toS(): String = {
+    val instrName = getInstructionName
+    val fields = getParameters.map(convertParameter)
+    instrName + " " + fields.mkString(", ")
+  }
 }
 
-case object End extends Instruction
-case object Nop extends Instruction
+case object End extends Instruction { override def toS = "end" }
+case object Nop extends Instruction { override def toS = "nop" }
 
 // TODO(petey): needs parameters (AWK: actually if we are using case classes,
 // it is easier not to have parameters here)
@@ -59,7 +144,9 @@ case class MoveWide16(a:Int, b:Int) extends Instruction
 case class MoveObject16(a:Int, b:Int) extends Instruction
 
 // return a void value
-case object ReturnVoid extends Instruction
+case object ReturnVoid extends Instruction {
+  override def getInstructionName = "return-void"
+}
 
 // return a value from a register specified by a 16-bit register address
 case class Return(a:Short) extends Instruction
@@ -78,44 +165,96 @@ case class InvokeVirtual(args:Array[Byte], b:Method) extends Instruction
 
 // Invoke the method indicated by B with the argument registers starting at the
 // 16-bit address referenced by C and until a total of A arguments are used
-case class InvokeVirtualRange(c:Int, a:Short, b:Method) extends Instruction
-case class InvokeSuperRange(c:Int, a:Short, b:Method) extends Instruction
-case class InvokeDirectRange(c:Int, a:Short, b:Method) extends Instruction
-case class InvokeStaticRange(c:Int, a:Short, b:Method) extends Instruction
-case class InvokeInterfaceRange(c:Int, a:Short, b:Method) extends Instruction
+case class InvokeVirtualRange(c:Int, a:Short, b:Method) extends Instruction {
+  override def toS(): String = toSInvokeRanged()
+}
+case class InvokeSuperRange(c:Int, a:Short, b:Method) extends Instruction {
+  override def toS(): String = toSInvokeRanged()
+}
+case class InvokeDirectRange(c:Int, a:Short, b:Method) extends Instruction {
+  override def toS(): String = toSInvokeRanged()
+}
+case class InvokeStaticRange(c:Int, a:Short, b:Method) extends Instruction {
+  override def toS(): String = toSInvokeRanged()
+}
+case class InvokeInterfaceRange(c:Int, a:Short, b:Method) extends Instruction {
+  override def toS(): String = toSInvokeRanged()
+}
 
 // instructions for branching
 
 // Jump, unconditionally, to the given target
-case class Goto(a:Int) extends Instruction
-case class Goto16(a:Int) extends Instruction
-case class Goto32(a:Int) extends Instruction
+case class Goto(a:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class Goto16(a:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class Goto32(a:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // Jump to the relative target indicated in B when the value at the 8-bit
 // register address in A is related to 0
-case class IfEqz(a:Short, b:Int) extends Instruction
-case class IfNez(a:Short, b:Int) extends Instruction
-case class IfLtz(a:Short, b:Int) extends Instruction
-case class IfGez(a:Short, b:Int) extends Instruction
-case class IfGtz(a:Short, b:Int) extends Instruction
-case class IfLez(a:Short, b:Int) extends Instruction
+case class IfEqz(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfNez(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfLtz(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfGez(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfGtz(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfLez(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // Jump to the relative target indicated in C when the values at the 4-bit
 // register address in A and B satisfy the given relationship
-case class IfEq(a:Byte, b:Byte, c:Int) extends Instruction
-case class IfNe(a:Byte, b:Byte, c:Int) extends Instruction
-case class IfLt(a:Byte, b:Byte, c:Int) extends Instruction
-case class IfGe(a:Byte, b:Byte, c:Int) extends Instruction
-case class IfGt(a:Byte, b:Byte, c:Int) extends Instruction
-case class IfLe(a:Byte, b:Byte, c:Int) extends Instruction
+case class IfEq(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfNe(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfLt(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfGe(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfGt(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class IfLe(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // Swithcing statements to support jump tables
 // TODO: Need to supply the packed or spaces swithc payload to
 // Jumps based on the value in the 8-bit register address referenced by A
-case class TempPackedSwitch(a:Short, b:Int) extends Instruction
-case class TempSparseSwitch(a:Short, b:Int) extends Instruction
-case class PackedSwitch(a:Short, firstKey:Int, targets:Array[Int]) extends Instruction
-case class SparseSwitch(a:Short, keys:Array[Int], targets:Array[Int]) extends Instruction
+case class TempPackedSwitch(a:Short, b:Int) extends Instruction {
+  override def getInstructionName = "packed-switch"
+  override def toS(): String = toSLastRaw()
+}
+case class TempSparseSwitch(a:Short, b:Int) extends Instruction {
+  override def getInstructionName = "sparse-switch"
+  override def toS(): String = toSLastRaw()
+}
+case class PackedSwitch(a:Short, firstKey:Int, targets:Array[Int]) extends Instruction {
+  override def toS(): String =
+    "packed-switch v" + a + ", " + firstKey + ", {" + targets.mkString(", ") + "}"
+}
+case class SparseSwitch(a:Short, keys:Array[Int], targets:Array[Int]) extends Instruction {
+  override def toS(): String =
+    "sparse-switch v" + a + " {" + keys.zip(targets).mkString(", ") + "}"
+}
 
 // throw the exception indicated in A
 case class Throw(a:Short) extends Instruction
@@ -143,23 +282,39 @@ case class CmpLong(a:Short, b:Short, c:Short) extends Instruction
 
 // stores the 32-bit (sign-extended if necessary) constant in B into a register
 // with a 4-bit (Const4) or an 8-bit (Const16, Const) register address
-case class Const4(a:Byte, b:Int) extends Instruction
-case class Const16(a:Short, b:Int) extends Instruction
-case class Const(a:Short, b:Int) extends Instruction
+case class Const4(a:Byte, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class Const16(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class Const(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // stores the 32-bit (right-zero-extended) constant in B into a register with
 // an 8-bit register address
-case class ConstHigh16(a:Short, b:Int) extends Instruction
+case class ConstHigh16(a:Short, b:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // stores the 64-bit (sign-extended if necessary) constant in B into a
 // register-pair with an 8-bit register address
-case class ConstWide16(a:Short, b:Long) extends Instruction
-case class ConstWide32(a:Short, b:Long) extends Instruction
-case class ConstWide(a:Short, b:Long) extends Instruction
+case class ConstWide16(a:Short, b:Long) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class ConstWide32(a:Short, b:Long) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class ConstWide(a:Short, b:Long) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // stores the 64-bit (right-zero-extended) constant in B into a register with
 // an 8-bit register address
-case class ConstWideHigh16(a:Short, b:Long) extends Instruction
+case class ConstWideHigh16(a:Short, b:Long) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // stores a String from the String constants table into a register with an
 // 8-bit register address
@@ -283,30 +438,68 @@ case class RemDouble(a:Short, b:Short, c:Short) extends Instruction
 
 // perform arithmetic operation on value found at B 8-bit register and inline
 // literal and put result in A
-case class AddIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class RsubIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class MulIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class DivIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class RemIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class AndIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class OrIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class XorIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class ShlIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class ShrIntLit8(a:Short, b:Short, c:Int) extends Instruction
-case class UshrIntLit8(a:Short, b:Short, c:Int) extends Instruction
+case class AddIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class RsubIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class MulIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class DivIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class RemIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class AndIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class OrIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class XorIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class ShlIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class ShrIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class UshrIntLit8(a:Short, b:Short, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // Arithmetic with 32-bit (sign extended from 16-bit) literal integer
 
 // perform arithmetic operation on value found at B 4-bit register and the
 // inline literal and put result in A
-case class AddIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
-case class RsubInt(a:Byte, b:Byte, c:Int) extends Instruction
-case class MulIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
-case class DivIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
-case class RemIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
-case class AndIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
-case class OrIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
-case class XorIntLit16(a:Byte, b:Byte, c:Int) extends Instruction
+case class AddIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class RsubInt(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class MulIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class DivIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class RemIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class AndIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class OrIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
+case class XorIntLit16(a:Byte, b:Byte, c:Int) extends Instruction {
+  override def toS(): String = toSLastRaw()
+}
 
 // Instructions for getting and setting instance variables on objects
 
@@ -380,21 +573,34 @@ case class NewArray(a:Byte, b:Byte, var c:JavaType)  extends Instruction
 // TODO: need to supply the FillArrayDataPayload, indicated in the B
 // Stores the array values found in a fill-array-data-payload into the array
 // referenced from the 8-bit register address in A
-case class TempFillArrayData(a:Short, b:Int) extends Instruction
-case class FillArrayData(a:Short, size:Long, elementWidth:Int, data:Array[Short]) extends Instruction
+case class TempFillArrayData(a:Short, b:Int) extends Instruction {
+  override def getInstructionName = "fill-array-data"
+  override def toS(): String = toSLastRaw()
+}
+case class FillArrayData(a:Short, size:Long, elementWidth:Int, data:Array[Short]) extends Instruction {
+  override def toS(): String =
+    "fill-array-data v" + a + ", " + size + ", " + elementWidth + ", {" +
+      data.mkString(", ") + "}"
+}
 
 // Creates a new filled array of the type in B with the values from the 4-bit
 // register addresses referenced by the args and places the result in the
 // same place as the result of calling an invoke instruction;  the result
 // can be moved using an immediately subsequent move-result-object instruction
-case class FilledNewArray(args:Array[Byte], var b:JavaType) extends Instruction
+case class FilledNewArray(args:Array[Byte], var b:JavaType) extends Instruction {
+  override def toS(): String =
+    "fill-new-array {v" + args.mkString(", v") + "} " + b.toS
+}
 
 // Creates a new filled array of the type in B with the values from the set
 // of registers starting at the 16-bit register address indicated by C for the
 // count stored in A and places the result in the same place as the result of
 // calling an invoke instruction;  the result can be moved using an immediately
 // subsequent move-result-object instruction
-case class FilledNewArrayRange(c:Int, a:Short, var b:JavaType) extends Instruction
+case class FilledNewArrayRange(c:Int, a:Short, var b:JavaType) extends Instruction {
+  override def toS(): String =
+    "fill-new-array/range {v" + rangeToVarRef(a, c) + "} " + b.toS
+}
 
 // Retrieves a value from the index referenced in the 8-bit register
 // address in C in an array referenced by the 8-bit register address in B and
@@ -420,6 +626,16 @@ case class APutShort(a:Short, b:Short, c:Short) extends Instruction
 
 /* not really instructions, but added here to see if we can get a complete
  * reading of the instruction code finished */
-case class PackedSwitchPayload(firstKey:Int, targets:Array[Int]) extends Instruction
-case class SparseSwitchPayload(keys:Array[Int], targets:Array[Int]) extends Instruction
-case class FillArrayDataPayload(size:Long, elementWidth:Int, data:Array[Short]) extends Instruction
+case class PackedSwitchPayload(firstKey:Int, targets:Array[Int]) extends Instruction {
+  override def toS(): String =
+    "packed-switch-payload " + firstKey + ", {" + targets.mkString(", ")  + "}" 
+}
+case class SparseSwitchPayload(keys:Array[Int], targets:Array[Int]) extends Instruction {
+  override def toS(): String =
+    "sparse-switch-payload {" + keys.zip(targets).mkString(", ") + "}"
+}
+case class FillArrayDataPayload(size:Long, elementWidth:Int, data:Array[Short]) extends Instruction {
+  override def toS(): String =
+    "fill-array-data-payload " + size + ", " + elementWidth + ", {" +
+       data.mkString(", ") + "}"
+}

@@ -2,23 +2,30 @@ package com.ucombinator.dalvik.AST
 
 // Represents the interface for all Java types, whether user-defined, library-defined, or primitive
 abstract class JavaType {
-  
+  protected def canonicalClassName(s: String): String =
+    s.substring(1, s.length - 1).replace("/", ".")
+
+  def toS(): String
 }
 
-object VoidType extends JavaType
-object BooleanType extends JavaType
-object ByteType extends JavaType
-object ShortType extends JavaType
-object CharType extends JavaType
-object IntType extends JavaType
-object LongType extends JavaType
-object FloatType extends JavaType
-object DoubleType extends JavaType
-class ArrayType(var typeOf: JavaType) extends JavaType
+object VoidType extends JavaType { def toS() = "void" }
+object BooleanType extends JavaType { def toS() = "boolean" }
+object ByteType extends JavaType { def toS() = "byte" }
+object ShortType extends JavaType { def toS() = "short" }
+object CharType extends JavaType { def toS() = "char" }
+object IntType extends JavaType { def toS() = "int" }
+object LongType extends JavaType { def toS() = "long" }
+object FloatType extends JavaType { def toS() = "float" }
+object DoubleType extends JavaType { def toS() = "double" }
+class ArrayType(var typeOf: JavaType) extends JavaType {
+  def toS() = "Array[" + typeOf.toS + "]"
+}
 
 // This is a temporary place holder for an actual type,
 // used while the file is being read.
-class AbstractType(val nameOf: String) extends JavaType
+class AbstractType(val nameOf: String) extends JavaType {
+  def toS() = canonicalClassName(nameOf)
+}
 
 // Represents the interface for all classes, whether user-defined or library-defined
 //abstract class ClassDef(superclass: ClassDef, sourcefile: String) extends JavaType {
@@ -72,6 +79,7 @@ class ClassDef(val name: String, val accessFlags: Long, var superClass: JavaType
 
   lazy val methodMap = methods.foldLeft(Map.empty[String,MethodDef])((map, meth) => map + (meth.name -> meth))
   
+  def toS() = canonicalClassName(name)
 }
 
 class AnnotationItem(val visibility:Short, val annotation:EncodedAnnotation)

@@ -20,7 +20,9 @@ case object EncodedNull extends EncodedValue
 case class EncodedBoolean(b:Boolean) extends EncodedValue
 class AnnotationElement(val name:String, val value:EncodedValue)
 
-class Field(var classType: JavaType, var fieldType: JavaType, val name: String)
+class Field(var classType: JavaType, var fieldType: JavaType, val name: String) {
+  def fullyQualifiedName = classType.toS + "." + name
+}
 
 class FieldDef(val field: Field, val accessFlags: Long, val defaultStaticValue: EncodedValue) {
   val name = field.name
