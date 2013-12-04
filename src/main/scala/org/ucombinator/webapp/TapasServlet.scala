@@ -2,7 +2,7 @@ package org.ucombinator.webapp
 
 import org.scalatra._
 import scalate.ScalateSupport
-import slick.session.Database
+import scala.slick.session.Database
 
 class TapasServlet(val db: Database) extends TapasWebAppStack {
   get("/") {

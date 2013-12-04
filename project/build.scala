@@ -31,6 +31,7 @@ object MyScalatraWebAppBuild extends Build {
         "org.scalatra" %% "scalatra-scalate" % ScalatraVersion,
         "org.scalatra" %% "scalatra-auth" % ScalatraVersion,
         "org.scalatra" %% "scalatra-specs2" % ScalatraVersion % "test",
+        "commons-codec" % "commons-codec" % "1.4",
         "com.typesafe.slick" %% "slick" % "1.0.1",
         "com.h2database" % "h2" % "1.3.174",
         "com.mchange" % "c3p0" % "0.9.5-pre5",
