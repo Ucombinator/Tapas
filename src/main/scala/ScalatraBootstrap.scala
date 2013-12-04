@@ -1,4 +1,4 @@
-import com.ucombinator.webapp._
+import org.ucombinator.webapp._
 import org.scalatra._
 import javax.servlet.ServletContext
 import com.mchange.v2.c3p0.ComboPooledDataSource

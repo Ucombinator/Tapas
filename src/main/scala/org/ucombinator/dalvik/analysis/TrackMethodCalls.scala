@@ -1,7 +1,7 @@
-package com.ucombinator.dalvik.analysis
+package org.ucombinator.dalvik.analysis
 
 import xml.{XML, NodeSeq}
-import com.ucombinator.dalvik.AST._
+import org.ucombinator.dalvik.AST._
 import collection.SortedSet
 
 /** A simple analyzer that builds sets of methods that are called by one of the

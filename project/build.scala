@@ -6,7 +6,7 @@ import com.mojolly.scalate.ScalatePlugin._
 import ScalateKeys._
 
 object MyScalatraWebAppBuild extends Build {
-  val Organization = "com.ucombinator"
+  val Organization = "org.ucombinator"
   val Name = "Tapas"
   val Version = "0.1.0-SNAPSHOT"
   val ScalaVersion = "2.10.2"

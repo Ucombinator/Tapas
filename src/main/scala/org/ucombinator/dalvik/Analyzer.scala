@@ -1,13 +1,13 @@
-package com.ucombinator.dalvik
+package org.ucombinator.dalvik
 
 import scala.util.parsing.combinator._
 import scala.util.matching.Regex
 import java.io.{PrintStream, FileOutputStream, File, FileReader}
 import io.Source
 import collection.SortedSet
-import com.ucombinator.dalvik.android.ApkReader
-import com.ucombinator.dalvik.AST._
-import com.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
+import org.ucombinator.dalvik.android.ApkReader
+import org.ucombinator.dalvik.AST._
+import org.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
 import annotation.tailrec
 
 object Analyzer extends App {

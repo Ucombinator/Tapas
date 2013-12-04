@@ -1,4 +1,4 @@
-package com.ucombinator.dalvik.AST
+package org.ucombinator.dalvik.AST
 
 import collection.SortedMap
 import annotation.tailrec

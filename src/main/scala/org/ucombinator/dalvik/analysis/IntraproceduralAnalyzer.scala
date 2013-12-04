@@ -1,6 +1,6 @@
-package com.ucombinator.dalvik.analysis
+package org.ucombinator.dalvik.analysis
 
-import com.ucombinator.dalvik.AST._
+import org.ucombinator.dalvik.AST._
 
 class IntraproceduralAnalyzer(classes: Array[ClassDef]) extends SimpleMethodCallGraph(classes: Array[ClassDef]) {
   override def processInstructions(methodProxy: MethodDefProxy)(code: CodeItem) {

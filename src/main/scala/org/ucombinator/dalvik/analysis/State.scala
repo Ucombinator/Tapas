@@ -1,6 +1,6 @@
-package com.ucombinator.dalvik.analysis
+package org.ucombinator.dalvik.analysis
 
-import com.ucombinator.dalvik.AST.Instruction
+import org.ucombinator.dalvik.AST.Instruction
 
 sealed class AbstractCounterInt {
 }

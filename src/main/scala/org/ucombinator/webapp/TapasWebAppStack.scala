@@ -1,4 +1,4 @@
-package com.ucombinator.webapp
+package org.ucombinator.webapp
 
 import org.scalatra._
 import scalate.ScalateSupport

@@ -1,4 +1,4 @@
-package com.ucombinator.dalvik.AST
+package org.ucombinator.dalvik.AST
 
 object AccessFlags {
   val ACC_PUBLIC = 0x1

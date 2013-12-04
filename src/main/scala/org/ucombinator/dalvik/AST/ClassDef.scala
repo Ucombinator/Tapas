@@ -1,4 +1,4 @@
-package com.ucombinator.dalvik.AST
+package org.ucombinator.dalvik.AST
 
 // Represents the interface for all Java types, whether user-defined, library-defined, or primitive
 abstract class JavaType {

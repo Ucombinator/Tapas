@@ -1,9 +1,9 @@
-package com.ucombinator.dalvik.android
+package org.ucombinator.dalvik.android
 
 import java.util.zip.ZipFile
 import java.io.{File,FileOutputStream}
-import com.ucombinator.dalvik.AST.DexReader
-import com.ucombinator.dalvik.AST.ClassDef
+import org.ucombinator.dalvik.AST.DexReader
+import org.ucombinator.dalvik.AST.ClassDef
 
 /** The ApkReader is mostly a wrapper class for reading the contained dex file
   * within the APK file.  Eventually the idea is to have the APK file also read

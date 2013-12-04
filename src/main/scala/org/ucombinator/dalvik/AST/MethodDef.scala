@@ -1,4 +1,4 @@
-package com.ucombinator.dalvik.AST
+package org.ucombinator.dalvik.AST
 
 class Prototype(val shortDescriptor:String, var returnType:JavaType, val parameters:Array[JavaType])
 

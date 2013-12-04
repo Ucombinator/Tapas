@@ -1,6 +1,6 @@
-package com.ucombinator.dalvik.analysis
+package org.ucombinator.dalvik.analysis
 
-import com.ucombinator.dalvik.AST._
+import org.ucombinator.dalvik.AST._
 
 /** Proxy class to wrap ClassDef that stores links to subclasses and a map of
   * method names to MethodDefProxy objects.  It may make sense to integrate

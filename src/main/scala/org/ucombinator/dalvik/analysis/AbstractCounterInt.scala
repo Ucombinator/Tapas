@@ -1,4 +1,4 @@
-package com.ucombinator.dalvik.analysis
+package org.ucombinator.dalvik.analysis
 
 //sealed class AbstractCounterInt {
 //}
