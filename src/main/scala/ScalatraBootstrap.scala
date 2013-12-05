@@ -17,9 +17,10 @@ class ScalatraBootstrap extends LifeCycle {
       // for right now create our DDL on startup because we are using an in
       // memory database.
       (Users.ddl ++ AndroidApps.ddl).create
-      Users.addUser("Admin User", "root", "ucomb2013", true)
+      Users.addUser("Admin User", "root", None, "ucomb2013", true)
     }
     context.mount(new TapasServlet(db), "/*")
+    context.mount(new LoginServlet(db), "/account/*")
   }
 
   private def closeDbConnection() = cpds.close

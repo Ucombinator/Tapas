@@ -1,24 +1,52 @@
 package org.ucombinator.webapp.db
 
-import scala.slick.driver.H2Driver.simple._
-import Database.threadLocalSession
 import org.ucombinator.webapp.util.Password
+import org.ucombinator.webapp.model._
 
-object Users extends Table[(Int, String, String, String, Boolean)]("USERS") {
+import scala.slick.session.Session
+import scala.slick.driver.H2Driver.simple._
+
+import Database.threadLocalSession
+
+object Users extends Table[(Int, String, String, Option[String], String, Boolean)]("USERS") {
   def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
   def name = column[String]("name")         // the user's real name
-  def email = column[String]("email")       // email address/username
+  def username = column[String]("username") // username, because I actually prefer this to email addr
+  def email = column[Option[String]]("email")       // email address/username
   def password = column[String]("password") // password, which will be hashed
   def admin = column[Boolean]("admin")
 
-  def * = id ~ name ~ email ~ password ~ admin
+  def * = id ~ name ~ username ~ email ~ password ~ admin
+
+  def usernameIdx = index("username_idx", username, unique = true)
 
   // additional methods
-  private def autoInc = id.? ~ name ~ email ~ password ~ admin
+  private def autoInc = name ~ username ~ email ~ password ~ admin returning id
 
-  def addUser(name: String, email: String, password: String, admin: Boolean = false) {
-    autoInc.insert(None, name, email, Password(password), admin)
-  }
+  def addUser(name: String, username: String, email: Option[String], password: String, admin: Boolean = false): Int =
+    autoInc.insert(name, username, email, Password(password), admin)
+
+  def lookupUserById(id: Int): Option[User] = 
+    Query(Users).filter(_.id === id).firstOption match {
+      case Some((id, name, un, email, pw, admin)) => Some(User(id, name, un, email, admin))
+      case None => None
+    }
+
+  def isUsernameAvailable(username: String): Boolean =
+    Query(Users).filter(_.username === username).firstOption match {
+      case Some(u) => false
+      case None => true
+    }
+
+  def checkPassword(username: String, password: String): Option[User] =
+    Query(Users).filter(_.username === username).firstOption match {
+      case Some((id, name, un, email, pw, admin)) =>
+        if (pw == Password(password))
+          Some(User(id, name, un, email, admin))
+        else
+          None
+      case None => None
+    }
 }
 
 object AndroidApps extends Table[(Int, Int, String, String)]("ANDROID_APPS") {

@@ -4,7 +4,16 @@ import org.scalatra._
 import scalate.ScalateSupport
 import scala.slick.session.Database
 
-class TapasServlet(val db: Database) extends TapasWebAppStack {
+import org.ucombinator.webapp.auth.AuthenticationSupport
+
+class TapasServlet(val db: Database) extends TapasWebAppStack with AuthenticationSupport {
+
+  before() {
+    db withSession {
+      requireLogin()
+    }
+  }
+
   get("/") {
     <html>
       <head>
