@@ -1,5 +1,8 @@
 package org.ucombinator.webapp.db
 
+import java.util.Date
+import java.sql.Timestamp
+
 import org.ucombinator.webapp.util.Password
 import org.ucombinator.webapp.model._
 
@@ -49,13 +52,24 @@ object Users extends Table[(Int, String, String, Option[String], String, Boolean
     }
 }
 
-object AndroidApps extends Table[(Int, Int, String, String)]("ANDROID_APPS") {
+object AndroidApps extends Table[(Int, Int, String, String, Timestamp)]("ANDROID_APPS") {
   def id = column[Int]("id", O.PrimaryKey, O.AutoInc)
   def userId = column[Int]("user_id")
   def appName = column[String]("app_name")
   def fileLocation = column[String]("file_location")
+  def fileUploadDate = column[Timestamp]("file_upload_date")
 
-  def * = id ~ userId ~ appName ~ fileLocation
+  def * = id ~ userId ~ appName ~ fileLocation ~ fileUploadDate
 
   def user = foreignKey("user_fk", userId, Users)(_.id)
+
+  private def autoInc = userId ~ appName ~ fileLocation ~ fileUploadDate returning id
+
+  def addApp(user: User, appName: String, fileLocation: String): Int =
+    autoInc.insert(user.id, appName, fileLocation, new Timestamp(new Date().getTime()))
+
+  def getApps(user: User): List[AndroidApp] =
+    Query(AndroidApps).filter(_.userId === user.id).list map {
+      (a) => AndroidApp(a._1, user, a._3, a._4, a._5)
+    }
 }

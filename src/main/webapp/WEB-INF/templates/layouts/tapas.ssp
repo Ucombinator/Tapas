@@ -1,0 +1,30 @@
+<%@ val title: String %>
+<%@ val body: String %>
+<%@ val isSignedIn: Boolean %>
+<%@ val isAdmin: Boolean %>
+<!DOCTYPE html>
+<html lang="en_us">
+  <head>
+    <title>${title}</title>
+    <!-- [if lt IE 9[>
+    <script src="/js/html5shiv.hs"></script>
+    <![endif]-->
+    <link rel="stylesheet" type="text/css" href="/css/normalize.css">
+  </head>
+  <body>
+    <div id="header">
+      #if (isSignedIn)
+        <a href="/account/logout">Sign Out</a>
+      #else
+        <a href="/account/login">Sign In</a> 
+      #end
+    </div>
+    ${unescape(body)}
+    <div id="footer">
+      #if (isSignedIn)
+        <a href="/settings/editSettings">Settings</a>
+        <a href="/myApps">Analyzed Apps</a>
+      #end
+    </div>
+  </body>
+</html>

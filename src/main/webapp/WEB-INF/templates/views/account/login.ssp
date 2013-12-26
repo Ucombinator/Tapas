@@ -1,0 +1,70 @@
+<% attributes("layout") = "/WEB-INF/layouts/tapas.ssp" %>
+<%@ import val flash:org.scalatra.FlashMap %>
+<div id="contentWrapper">
+  #if (flash isDefinedAt "loginError")
+  <div id="flash">
+    <%= flash.getOrElse("loginError", "") %>
+  </div>
+  #end
+  <div id="content">
+    #if (! (flash isDefinedAt "loginOnly"))
+    <div id="signup">
+      <form action="signup" method="post">
+        <label for="name">Name</label>
+        <input type="text" name="name"
+          #if (flash isDefinedAt "signup.name.value")
+            value="<%= flash.getOrElse("signup.name.value", "")%>"
+          #else
+            placeholder="John Smith"
+          #end
+          >
+        #if (flash isDefinedAt "signup.name")
+          <div class="error"><%=flash.getOrElse("signup.name", "")%></div>
+        #end
+        <label for="username">Username</label>
+        <input type="text" name="username"
+          #if (flash isDefinedAt "signup.username.value")
+            value="<%= flash.getOrElse("signup.username.value", "")%>"
+          #else
+            placeholder="jsmith"
+          #end
+          >
+        #if (flash isDefinedAt "signup.username")
+          <div class="error"><%=flash.getOrElse("signup.username", "")%></div>
+        #end
+        <label for="email">Email</label>
+        <input type="email" name="email"
+          #if (flash isDefinedAt "signup.email.value")
+            value="<%= flash.getOrElse("signup.email.value", "")%>"
+          #else
+            placeholder="jsmith@bigbluebox.org"
+          #end
+          >
+        #if (flash isDefinedAt "signup.email")
+          <div class="error"><%=flash.getOrElse("signup.email", "")%></div>
+        #end
+        <label for="password">Password</label>
+        <input type="password" name="password">
+        #if (flash isDefinedAt "signup.password")
+          <div class="error"><%=flash.getOrElse("signup.password", "")%></div>
+        #end
+        <label for="password_confirm">Password Confirmation</label>
+        <input type="password" name="password_confirm">
+        #if (flash isDefinedAt "signup.password_confirm")
+          <div class="error"><%= flash.getOrElse("signup.password_confirm", "")%></div>
+        #end
+        <input type="submit" value="Sign Up!">
+      </form>
+    </div>
+    #end
+    #if (! (flash isDefinedAt "signupOnly"))
+    <div id="login">
+      <form action="login" method="post">
+        <input type="text" name="username">
+        <input type="password" name="password">
+        <input type="submit" value="Login">
+      </form>
+    </div>
+    #end
+  </div>
+</div>

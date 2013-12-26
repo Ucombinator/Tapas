@@ -8,7 +8,7 @@ import org.ucombinator.webapp.model.User
 trait AuthenticationSupport extends ScalatraBase with ScentrySupport[User] {
   self: ScalatraBase =>
 
-  protected def fromSession =  {
+  protected def fromSession = {
     case id =>  User(id)
   }
 

@@ -8,42 +8,24 @@ import org.ucombinator.webapp.auth.AuthenticationSupport
 import org.ucombinator.webapp.db.Users
 
 class LoginServlet(val db: Database) extends TapasWebAppStack with FlashMapSupport with AuthenticationSupport {
+  before() {
+    flash("test") = "foo"
+  }
   get("/") {
     db withSession {
       if (isAuthenticated) {
         redirect("/")
       } else {
-        redirect("/login")
+        redirect("/account/login")
       }
     }
   }
 
   get("/login") {
-    <html>
-      <body>
-        <div id="flash">
-          { flash.getOrElse("loginFail", "") }
-          { flash.getOrElse("signupFail", "") }
-        </div>
-        <div id="signup">
-          <form action="signup" method="post">
-            <input type="text" name="name" placeholder="John Smith" />
-            <input type="text" name="username" placeholder="jsmith" />
-            <input type="email" name="email" placeholder="jsmith@bigbluebox.org" />
-            <input type="password" name="password" placeholder="tardiskey" />
-            <input type="password" name="password_confirm" placeholder="tardiskey" />
-            <input type="submit" value="Sign Up!" />
-          </form>
-        </div>
-        <div id="login">
-           <form action="login" method="post">
-             <input type="text" name="username" />
-             <input type="password" name="password" />
-             <input type="submit" value="Login" />
-           </form>
-        </div>
-      </body>
-    </html>
+    contentType = "text/html"
+    ssp("/account/login",
+      ("flash", flash), ("title", "Login or Sign-up!"),
+      ("isSignedIn", false), ("isAdmin", false))
   }
 
   post("/login") {
@@ -52,8 +34,9 @@ class LoginServlet(val db: Database) extends TapasWebAppStack with FlashMapSuppo
       if (isAuthenticated) {
         redirect("/")
       } else {
-        flash("loginFail") = "incorrect username or password"
-        redirect("/login")
+        flash("loginError") = "incorrect username or password"
+        flash("loginOnly") = "true"
+        redirect("/account/login")
       }
     }
   }
@@ -115,8 +98,9 @@ class LoginServlet(val db: Database) extends TapasWebAppStack with FlashMapSuppo
       flash("signup.name.value") = name
       flash("signup.username.value") = username
       flash("signup.email.value") = email match { case Some(s) => s; case _ => "" }
-      flash("signupFail") = "Unable to signup, please correct the following errors"
-      redirect("/login")
+      flash("loginError") = "Unable to signup, please correct the following errors"
+      flash("signupOnly") = "true"
+      redirect("/account/login")
     }
   }
 

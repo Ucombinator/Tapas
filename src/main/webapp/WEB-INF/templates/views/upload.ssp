@@ -1,0 +1,25 @@
+<% attributes("layout") = "/WEB-INF/layouts.tapas.ssp" %>
+<%@ import val flash:org.scalatra.FlashMap %>
+
+<h1>Please upload an APK file</h1>
+
+<div id="form">
+  <label for="appname">App name</label>
+  <input type="text" name="appname"
+    #if (flash isDefinedAt "upload.appname.value")
+      value="<%= flash.getOrElse("upload.appname.value", "") %>"
+    #else
+      placeholder="Android App Name"
+    #end
+    >
+  #if (flash isDefinedAt "upload.appname")
+    <div class="error"><%= flash.getOrElse("upload.appname", "") %></div>
+  #end
+  <label for="thefile">APK File</label>
+  #if (flash isDefinedAt "upload.thefile.filename")
+    <%= flash.get("upload.thefile.filename") %>
+  #else
+    <input type="file" name="thefile">
+  #end
+  <input type="submit" value="Upload App">
+</div>
