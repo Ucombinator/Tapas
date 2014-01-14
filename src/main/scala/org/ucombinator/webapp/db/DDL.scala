@@ -72,4 +72,17 @@ object AndroidApps extends Table[(Int, Int, String, String, Timestamp)]("ANDROID
     Query(AndroidApps).filter(_.userId === user.id).list map {
       (a) => AndroidApp(a._1, user, a._3, a._4, a._5)
     }
+
+  // Might want to consider adding user to predicate so that we can limit the
+  // lookup to the currently logged in user, so that the id cannot be snooped.
+  def getApp(id: Int): Option[AndroidApp] = 
+    Query(AndroidApps).filter(_.id === id).firstOption match {
+      case Some((id, userId, appName, fileLocation, fileUploadDate)) =>
+        val user = Users.lookupUserById(userId) match {
+                     case Some(user) => user
+                     case None => null
+                   }
+        Some(AndroidApp(id, user, appName, fileLocation, fileUploadDate))
+      case None => None
+    }
 }

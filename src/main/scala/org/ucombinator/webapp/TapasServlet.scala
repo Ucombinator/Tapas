@@ -13,12 +13,20 @@ import org.ucombinator.webapp.db.AndroidApps
 import org.ucombinator.dalvik.android.ApkReader
 import org.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
 
-class TapasServlet(val db: Database) extends TapasWebAppStack with AuthenticationSupport with FileUploadSupport {
+class TapasServlet(val db: Database) extends TapasWebAppStack with AuthenticationSupport with FileUploadSupport with FlashMapSupport {
   configureMultipartHandling(MultipartConfig(maxFileSize = Some(3 * 1024 * 1024)))
 
   before() {
-    db withSession {
-      requireLogin()
+    val reqpath = requestPath
+    println(reqpath)
+    // not sure if this is the best way to do this, it is mostly useful because
+    // it is easier to serve the static content through Scalatra.
+    if (! (reqpath.startsWith("/css") ||
+           reqpath.startsWith("/js") ||
+           reqpath.startsWith("/img"))) {
+      db withSession {
+        requireLogin()
+      }
     }
   }
 
@@ -26,7 +34,7 @@ class TapasServlet(val db: Database) extends TapasWebAppStack with Authenticatio
     contentType = "text/html"
 
     db withSession {
-      ssp("/index",
+      ssp("index",
         ("apps", AndroidApps.getApps(user)),
         ("title", "Welcome to Semantic Grep"),
         ("isSignedIn", true), ("isAdmin", user.isAdmin))
@@ -34,83 +42,65 @@ class TapasServlet(val db: Database) extends TapasWebAppStack with Authenticatio
   }
 
   get("/upload") {
-    <html>
-      <head>
-        <title>Tapas File Upload Form</title>
-      </head>
-      <body>
-        <h1>Please Upload an APK file</h1>
-        <p>{System.getProperty("user.name")}</p>
-        <p>{System.getProperty("user.dir")}</p>
-        <form method="post" enctype="multipart/form-data">
-          <input type="text" name="appname" placeholder="App Name" />
-          <input type="file" name="thefile" />
-          <input type="submit" value="Upload App" />
-        </form>
-      </body>
-    </html>
+    contentType = "text/html"
+    db withSession {
+      ssp("upload",
+        ("flash", flash),
+        ("title", "Upload an APK file"),
+        ("isSignedIn", true), ("isAdmin", user.isAdmin))
+    }
+  }
+
+  get("/analyze/:id") {
+    db withSession {
+      val maybeApp = AndroidApps.getApp(params("id").toInt)
+      maybeApp match {
+        case None => redirect("/appError")
+        case Some(app) => {
+          val simpleCallGraph = new SimpleMethodCallGraph(new ApkReader(app.fileLocation).readFile)
+          val config = new SourceSinkConfig("config/sourceSink.xml")
+          contentType = "text/html"
+          ssp("analyze",
+              ("sourcesAndSinks", new SourceSinkMethodCallAnalyzer(
+                                    config, simpleCallGraph,
+                                    Set.empty[Symbol],   // limitToCategories
+                                    Map.empty[Symbol,Int])),
+              ("title", "Upload an APK file"),
+              ("isSignedIn", true), ("isAdmin", user.isAdmin))
+        }
+      }
+    }
   }
 
   post("/upload") {
+    println("about to look at thefile")
+    println("keys: " + params.keys.mkString(", "))
+    params.foreach { (a) => println(a._1 + ": " + a._2) }
     fileParams.get("thefile") match {
       case Some(file) => {
+        println("we got something forwarding to analyze")
         val dir = new File("tmp" + File.separator + user.username)
         if (!dir.exists) dir.mkdirs
         val apkFile = new File(dir + File.separator + file.name)
         file.write(apkFile)
-        val apkReader = new ApkReader(apkFile)
-        val classDefs = apkReader.readFile
-        val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
-        val configFile = "config/sourceSink.xml"
-        val config = new SourceSinkConfig(configFile)
-        val limitToCategories = Set.empty[Symbol]
-        val costSpecification = Map.empty[Symbol,Int]
-        val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(
-          config, simpleCallGraph, limitToCategories, costSpecification)
 
         db withSession {
-          AndroidApps.addApp(user, params.getOrElse("appname", ""), apkFile.toString)
+          val id = AndroidApps.addApp(user, params.getOrElse("appname", ""), apkFile.toString)
+          redirect("/analyze/" + id)
         }
-
-        <html>
-          <head>
-            <title>Analyzer results</title>
-          </head>
-          <body>
-            <h1>Analyzer results</h1>
-            <p>Methods that call sources or sinks (higher numbers indicate more hits):</p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Cost</th>
-                  <th>Method name</th>
-                  <th>File location (if available)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sourcesAndSinks.methodCosts map {
-                   (a) => <tr>
-                            <td>{a._1}</td>
-                            <td>{a._2.method.classType.toS + "." + a._2.name}</td>
-                            <td>{a._2.sourceLocation match {
-                                   case Some((fn,line,pos)) =>
-                                     fn + " at line: " + line + " pos: " + pos
-                                   case None => ""
-                                 }}</td>
-                          </tr>
-                   }
-                }
-              </tbody>
-            </table>
-          </body>
-        </html>
       }
   
-      case None =>
-        BadRequest(
-         <p>
-            Hey! You forgot to select a file.
-         </p>)
+      case None => {
+        println("looks like we didn't get anything")
+        flash("upload.error") = "Please supply an APK file to analyze"
+        contentType = "text/html"
+        db withSession {
+          ssp("upload",
+              ("flash", flash),
+              ("title", "Upload an APK file"),
+              ("isSignedIn", true), ("isAdmin", user.isAdmin))
+        }
+      }
     }
   }
 }

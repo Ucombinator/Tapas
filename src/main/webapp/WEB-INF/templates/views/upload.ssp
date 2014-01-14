@@ -1,25 +1,56 @@
-<% attributes("layout") = "/WEB-INF/layouts.tapas.ssp" %>
+<% attributes("layout") = "/WEB-INF/layouts/tapas.ssp" %>
 <%@ import val flash:org.scalatra.FlashMap %>
 
-<h1>Please upload an APK file</h1>
+<style type="text/css">
+<!--
+  div#content {
+    background-color: #009999;
+    -moz-box-shadow: 0px 0px 3px 3px #ccc;
+    box-shadow: 5px 5px 5px 0px #ccc;
+    -moz-border-radius: 15px;
+    border-radius: 15px;
+    padding: 15px;
+    color: #FFF;
+  }
 
-<div id="form">
-  <label for="appname">App name</label>
-  <input type="text" name="appname"
-    #if (flash isDefinedAt "upload.appname.value")
-      value="<%= flash.getOrElse("upload.appname.value", "") %>"
-    #else
-      placeholder="Android App Name"
-    #end
-    >
-  #if (flash isDefinedAt "upload.appname")
-    <div class="error"><%= flash.getOrElse("upload.appname", "") %></div>
+  div#content h1 {
+    margin-bottom: 20px;
+  }
+-->
+</style>
+<div id="contentWrapper">
+  #if (flash isDefinedAt "upload.error")
+  <div id="flash">
+    <%= flash.getOrElse("upload.error", "") %>
+  </div>
   #end
-  <label for="thefile">APK File</label>
-  #if (flash isDefinedAt "upload.thefile.filename")
-    <%= flash.get("upload.thefile.filename") %>
-  #else
-    <input type="file" name="thefile">
-  #end
-  <input type="submit" value="Upload App">
+  <div id="content">
+    <h1>Please upload an APK file</h1>
+    
+    <div id="uploadForm">
+      <form action="upload" method="post" enctype="multipart/form-data">
+        <label for="appname">App name</label>
+        <input type="text" name="appname"
+          #if (flash isDefinedAt "upload.appname.value")
+            value="<%= flash.getOrElse("upload.appname.value", "") %>"
+          #else
+            placeholder="Android App Name"
+          #end
+          >
+        #if (flash isDefinedAt "upload.appname")
+          <div class="error"><%= flash.getOrElse("upload.appname", "") %></div>
+        #end
+        <label for="thefile">APK File</label>
+        #if (flash isDefinedAt "upload.thefile.filename")
+          <%= flash.get("upload.thefile.filename") %>
+        #else
+          <input type="file" name="thefile">
+          #if (flash isDefinedAt "upload.thefile")
+          <div class="error"><%= flash.getOrElse("upload.thefile", "") %></div>
+          #end
+        #end
+        <input type="submit" value="Upload App">
+      </form>
+    </div>
+  </div>
 </div>

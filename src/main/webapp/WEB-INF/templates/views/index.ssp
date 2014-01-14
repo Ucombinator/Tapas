@@ -1,30 +1,34 @@
 <% attributes("layout") = "/WEB-INF/layouts/tapas.ssp" %>
 <%@ val apps:List[org.ucombinator.webapp.model.AndroidApp] %> 
 
-<h1>Welcome to the Semantic Grep App</h1>
-
-<div id="appsBox">
+<div id="contentWrapper">
+  <h1>Welcome to the Semantic Grep App</h1>
+  
+  <div id="appsBox">
 #if (apps != Nil)
-  <table>
-    <thead>
-      <tr>
-        <th>App name</th>
-        <th>File name</th>
-        <th>Upload date</th>
-      </tr>
-    </thead>
-    <tbody>
+    <table>
+      <thead>
+        <tr>
+          <th>App name</th>
+          <th>File name</th>
+          <th>Upload date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
 #for (a <- apps)
-       <tr>
-         <td><%= a.appName %></td>
-         <td><%= new java.io.File(a.fileLocation).getName %></td>
-         <td><%= new java.text.SimpleDateFormat("EEE, MMM d, yyyy h:mm a").format(a.uploadDate) %></td>
-       </tr>
+         <tr>
+           <td><%= a.appName %></td>
+           <td><%= new java.io.File(a.fileLocation).getName %></td>
+           <td><%= new java.text.SimpleDateFormat("EEE, MMM d, yyyy h:mm a").format(a.uploadDate) %></td>
+           <td><a href="/analyze/<%= a.id %>">analyze</a></td>
+         </tr>
 #end
-    </tbody>
-  </table>
+      </tbody>
+    </table>
 #end
-  <div id="addAppBox">
-    <a href="/upload">Upload an app</a>
+    <div id="addAppBox">
+      <a href="/upload">Upload an app</a>
+    </div>
   </div>
 </div>

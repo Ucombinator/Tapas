@@ -12,19 +12,25 @@
     <link rel="stylesheet" type="text/css" href="/css/normalize.css">
   </head>
   <body>
-    <div id="header">
+    <header>
+      <div id="rightNav">
       #if (isSignedIn)
         <a href="/account/logout">Sign Out</a>
       #else
         <a href="/account/login">Sign In</a> 
       #end
-    </div>
-    ${unescape(body)}
-    <div id="footer">
+      </div>
       #if (isSignedIn)
-        <a href="/settings/editSettings">Settings</a>
-        <a href="/myApps">Analyzed Apps</a>
+      <div id="normalNav">
+        <a href="/">Analyzed Apps</a>
+      </div>
       #end
-    </div>
+    </header>
+    ${unescape(body)}
+    <footer>
+      #if (isSignedIn)
+        <a href="/settings/editSettings"><img src="/img/gear.png" width="54" height="55" alt="settings"></a>
+      #end
+    </footer>
   </body>
 </html>

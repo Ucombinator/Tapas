@@ -29,6 +29,8 @@ time, mark, audio, video {
 
 body {
     line-height:1;
+    height: 100%;
+    font: 12pt/14pt Verdana, sans-serif; /* AWK: added default font */
 }
 
 article,aside,details,figcaption,figure,
@@ -100,3 +102,89 @@ hr {
 input, select {
     vertical-align:middle;
 }
+
+/*
+ * Start of styling for the Tapas web app specifically
+ */
+header {
+  background-color: #009999;
+  color: #FFF;
+  height: 55px;
+  top: 0px;
+  position: fixed;
+  vertical-align: middle;
+  font: bold 14pt Verdana, sans-serif;
+  width: 100%;
+}
+
+header a {
+  color: #FFF;
+  font: bold 14pt Verdana, sans-serif;
+  text-decoration: none;
+}
+
+header a:hover {
+  color: #BF3030;
+}
+
+header div#rightNav {
+  float: right;
+  padding: 15px 30px 15px 30px;
+}
+
+header div#normalNav {
+  padding: 15px 0px 15px 30px;
+}
+
+footer {
+  background-color: #009999;
+  position: fixed;
+  bottom: 0px;
+  width: 100%;
+  text-align: right;
+  height: 65px;
+}
+
+footer img {
+  margin: 5px
+}
+
+div#contentWrapper {
+  width: 80%;
+  margin: 75px auto 20px auto;
+  padding-bottom: 65px;
+}
+
+/* some defaults for forms */
+input {
+  display: block;
+  font: 12pt Verdana, sans-serif;
+  margin: 5px 10px;
+  width: 200 px;
+}
+
+input[type=file] {
+  margin-left: 160px;
+}
+
+label {
+  display: block;
+  float: left;
+  margin-right: 10px;
+  width: 150px;
+  text-align: right;
+}
+
+div#flash {
+  color: red;
+  border: 1px solid #000;
+  margin: 20px auto 20px auto;
+  width: 100%;
+  padding: 15px;
+  -moz-box-shadow: 0px 0px 3px 3px #ccc;
+  box-shadow: 5px 5px 5px 0px #ccc;
+  -moz-border-radius: 15px;
+  border-radius: 15px;
+  font: bold 14pt Verdana, sans-serif;
+}
+

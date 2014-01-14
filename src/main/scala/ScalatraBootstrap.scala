@@ -14,9 +14,8 @@ class ScalatraBootstrap extends LifeCycle {
   override def init(context: ServletContext) = {
     val db = Database.forDataSource(cpds)
     db withSession {
-      // for right now create our DDL on startup because we are using an in
-      // memory database.
-      (Users.ddl ++ AndroidApps.ddl).create
+      // This code creates the database.  It needs to be run when the database is initially setup
+      // (Users.ddl ++ AndroidApps.ddl).create
       Users.addUser("Admin User", "root", None, "ucomb2013", true)
     }
     context.mount(new TapasServlet(db), "/*")

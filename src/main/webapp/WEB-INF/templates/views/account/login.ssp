@@ -1,5 +1,92 @@
 <% attributes("layout") = "/WEB-INF/layouts/tapas.ssp" %>
 <%@ import val flash:org.scalatra.FlashMap %>
+<style type="text/css">
+<!--
+div#content {
+#if (flash isDefinedAt "loginOnly")
+  width: 60%;
+  margin-left: auto;
+  margin-right: auto;
+#else
+  #if (flash isDefinedAt "signupOnly")
+  width: 80%;
+  margin-left: auto;
+  margin-right: auto;
+  #else
+  width: 100%;
+  #end
+#end
+  background-color: #009999;
+  -moz-box-shadow: 0px 0px 3px 3px #ccc;
+  box-shadow: 5px 5px 5px 0px #ccc;
+  -moz-border-radius: 15px;
+  border-radius: 15px;
+  padding: 15px;
+  color: #FFF;
+  font: 12pt Verdana, sans-serif;
+}
+
+div#content input {
+  display: block;
+  font: 12pt Verdana, sans-serif;
+  margin: 5px 10px 5px 0px;
+  width: 220px;
+}
+
+div#content div#signup input[type=submit] {
+  margin: 20px auto 20px 205px;
+}
+
+div#content input[type=submit] {
+  margin: 20px auto 20px 110px;
+  width: auto;
+}
+
+div#content div#signup label {
+  float: left;
+  width: 195px;
+  text-align: right;
+  margin-right: 10px;
+  display: block;
+}
+
+div#content div#login label {
+  float: left;
+  width: 100px;
+  text-align: right;
+  margin-right: 10px;
+  display: block;
+}
+
+div#content div#login {
+#if (flash isDefinedAt "loginOnly")
+  margin-left: auto;
+  margin-right: auto;
+  width: 342px;
+#else
+  float: left;
+  width: 45%;
+#end
+}
+
+div#content div#signup {
+#if (flash isDefinedAt "signupOnly")
+  margin-left: auto;
+  margin-right: auto;
+  width: 444px;
+#else
+  border-left: 4px groove #FFF;
+  margin: 0% 0% 0% 45%;
+#end
+}
+
+div.error {
+  color: #FF4040;
+  font: bold Verdana, sans-serif;
+  margin: 5px 10px 10px 30px;
+}
+-->
+</style>
 <div id="contentWrapper">
   #if (flash isDefinedAt "loginError")
   <div id="flash">
@@ -7,6 +94,17 @@
   </div>
   #end
   <div id="content">
+    #if (! (flash isDefinedAt "signupOnly"))
+    <div id="login">
+      <form action="login" method="post">
+        <label for="username">Username</label>
+        <input type="text" name="username">
+        <label for="password">Password</label>
+        <input type="password" name="password">
+        <input type="submit" value="Login">
+      </form>
+    </div>
+    #end
     #if (! (flash isDefinedAt "loginOnly"))
     <div id="signup">
       <form action="signup" method="post">
@@ -54,15 +152,6 @@
           <div class="error"><%= flash.getOrElse("signup.password_confirm", "")%></div>
         #end
         <input type="submit" value="Sign Up!">
-      </form>
-    </div>
-    #end
-    #if (! (flash isDefinedAt "signupOnly"))
-    <div id="login">
-      <form action="login" method="post">
-        <input type="text" name="username">
-        <input type="password" name="password">
-        <input type="submit" value="Login">
       </form>
     </div>
     #end

@@ -8,9 +8,6 @@ import org.ucombinator.webapp.auth.AuthenticationSupport
 import org.ucombinator.webapp.db.Users
 
 class LoginServlet(val db: Database) extends TapasWebAppStack with FlashMapSupport with AuthenticationSupport {
-  before() {
-    flash("test") = "foo"
-  }
   get("/") {
     db withSession {
       if (isAuthenticated) {
@@ -66,7 +63,7 @@ class LoginServlet(val db: Database) extends TapasWebAppStack with FlashMapSuppo
                    }
     val email = params.get("email")
     val password = params.get("password") match {
-                     case Some(password) => password
+                     case Some(password) if password != "" => password
                      case _ => {
                        flash("signup.password") = "please specify a password"
                        valid = false
@@ -76,7 +73,7 @@ class LoginServlet(val db: Database) extends TapasWebAppStack with FlashMapSuppo
     val password_confirm = params.get("password_confirm") match {
                              case Some(password_confirm) => {
                                if (password_confirm != password) {
-                                 flash("signup.password_confirm") = "password and conrimation do not match"
+                                 flash("signup.password_confirm") = "password and confirmation do not match"
                                  valid = false
                                }
                                password_confirm
