@@ -18,7 +18,6 @@ class TapasServlet(val db: Database) extends TapasWebAppStack with Authenticatio
 
   before() {
     val reqpath = requestPath
-    println(reqpath)
     // not sure if this is the best way to do this, it is mostly useful because
     // it is easier to serve the static content through Scalatra.
     if (! (reqpath.startsWith("/css") ||
