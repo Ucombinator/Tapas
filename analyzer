@@ -9,6 +9,8 @@ if (! [ -e $CLASSPATH ]); then
   CLASSPATH="${SCRIPT_DIR}/target/scala-${SCALA_VERSION}/classes"
 fi
 
+echo "CLASSPATH: $CLASSPATH"
+
 FOUND_CONFIG="no"
 
 for arg in $@; do
@@ -24,4 +26,4 @@ if [ $FOUND_CONFIG = "no" ] ; then
   CONFIG="-f ${SCRIPT_DIR}/config/sourceSink.xml"
 fi 
 
-scala -cp $CLASSPATH -J-Xmx1024m com.ucombinator.dalvik.Analyzer $CONFIG $@
+scala -cp $CLASSPATH -J-Xmx1024m org.ucombinator.dalvik.Analyzer $CONFIG $@
