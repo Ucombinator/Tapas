@@ -9,8 +9,6 @@ if (! [ -e $CLASSPATH ]); then
   CLASSPATH="${SCRIPT_DIR}/target/scala-${SCALA_VERSION}/classes"
 fi
 
-echo "CLASSPATH: $CLASSPATH"
-
 FOUND_CONFIG="no"
 
 for arg in $@; do
