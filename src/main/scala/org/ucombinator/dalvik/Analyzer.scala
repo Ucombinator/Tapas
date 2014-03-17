@@ -333,7 +333,7 @@ object Analyzer extends App {
     mds foreach {
       (md) => println("  " + md.method.classType.toS + "." + md.name +
                 (md.sourceLocation match {
-                   case Some((fn,line,pos)) => " [" + fn + " at line: " + line + " pos: " + pos + "]"
+                   case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
                    case None => ""
                    }))
     }
@@ -342,7 +342,7 @@ object Analyzer extends App {
     mds foreach {
       (a) => println("  " + a._1 + "\t" + a._2.method.classType.toS + "." + a._2.name +
                (a._2.sourceLocation match {
-                  case Some((fn,line,pos)) => " [" + fn + " at line: " + line + " pos: " + pos + "]"
+                  case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
                   case None => ""
                   }))
     }
