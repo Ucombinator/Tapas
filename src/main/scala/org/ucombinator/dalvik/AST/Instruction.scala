@@ -8,7 +8,8 @@ import language.implicitConversions
 class VarInfo(val registerNum: Long, val name: String, var varType: JavaType,
   val signature: String)
 
-class SourceInfo(val position: Long, val line: Long, val fn: String,
+class SourceInfo(val start_position: Long, val start_line: Long,
+    val end_position: Long, val end_line: Long, val fn: String,
   val varTable: Map[Long,VarInfo], val inPrologue: Boolean,
   val inEpilogue: Boolean)
 

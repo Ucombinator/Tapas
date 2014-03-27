@@ -63,7 +63,8 @@ class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) exte
 
   def sourceLocation: Option[(String,Long,Long)] = {
     code.insns.find { (insn) => insn.sourceInfo != null } match {
-      case Some(insn) => Some((insn.sourceInfo.fn, insn.sourceInfo.line, insn.sourceInfo.position))
+      case Some(insn) => Some((insn.sourceInfo.fn, insn.sourceInfo.start_line,
+          insn.sourceInfo.start_position))
       case None => None
     }
   }

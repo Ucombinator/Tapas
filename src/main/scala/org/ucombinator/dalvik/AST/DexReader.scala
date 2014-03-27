@@ -954,6 +954,7 @@ class DexReader(ch:FileChannel) {
       var epilogue_begin = false
 
       while(opcode != DBG_END_SEQUENCE) {
+        val next_opcode = reader.readUByte
         opcode match {
           case DBG_ADVANCE_PC => address += reader.readUleb128
           case DBG_ADVANCE_LINE => line += reader.readSleb128
@@ -999,15 +1000,18 @@ class DexReader(ch:FileChannel) {
           }
           case _ => {
             val adjusted_opcode = opcode - DBG_FIRST_SPECIAL
+            val next_adjusted_opcode = next_opcode - DBG_FIRST_SPECIAL
             line += DBG_LINE_BASE + (adjusted_opcode % DBG_LINE_RANGE)
+            val next_line = line + DBG_LINE_BASE + (next_adjusted_opcode % DBG_LINE_RANGE)
+            val next_address = address + (next_adjusted_opcode % DBG_LINE_RANGE)
             address += (adjusted_opcode / DBG_LINE_RANGE)
-            infoTable += address -> new SourceInfo(address, line, fn, varTable,
+            infoTable += address -> new SourceInfo(address, line, next_address, next_line, fn, varTable,
                 !prologue_end, epilogue_begin)
             prologue_end = false
             epilogue_begin = false
           }
         }
-        opcode = reader.readUByte
+        opcode = next_opcode
       }
       reader.position(pos)
       new DebugInfo(lineStart,parameterNames,infoTable)
