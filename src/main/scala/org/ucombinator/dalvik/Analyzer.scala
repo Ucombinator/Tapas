@@ -342,16 +342,24 @@ object Analyzer extends App {
     }
   }
   def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDef)]) {
-    mds foreach {
+    val json =  JsObject("annotations" -> JsArray((mds map {
       (a) => { 
-           //println(JsObject("method" -> JsString(a._2.name)).prettyPrint); 
-           println("  " + a._1 + "\t" + a._2.method.classType.toS + "." + a._2.name +
-               (a._2.sourceLocation match {
-                  case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
-                  case None => ""
-                }))
+           val (fn : String, line : Long, pos : Long)  = a._2.sourceLocation match {
+             case Some((fn,line,pos)) => (fn, line, pos)
+             case None => ("none", -1, -1)
+           }
+           JsObject("risk_score"        -> JsNumber(a._1), 
+                    "method"            -> JsString(a._2.name),
+                    "file_name"         -> JsString(fn),
+                    "class_name"        -> JsString(a._2.method.classType.toS),
+                    "short_description" -> JsString("<CATEGORY_HERE>"),
+                    "long_description"  -> JsString(""),
+                    "start_line"        -> JsNumber(line),
+                    "start_col"         -> JsNumber(pos)) 
       }
-    }
+    }).toList))
+    println(json.prettyPrint)
+   
   }
   wrapOutput {
     /* setting this aside in favor of the cost-sourted analysis */
