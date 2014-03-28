@@ -9,6 +9,9 @@ import org.ucombinator.dalvik.android.ApkReader
 import org.ucombinator.dalvik.AST._
 import org.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
 import annotation.tailrec
+import spray.json._
+import DefaultJsonProtocol._
+
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -340,11 +343,14 @@ object Analyzer extends App {
   }
   def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDef)]) {
     mds foreach {
-      (a) => println("  " + a._1 + "\t" + a._2.method.classType.toS + "." + a._2.name +
+      (a) => { 
+           //println(JsObject("method" -> JsString(a._2.name)).prettyPrint); 
+           println("  " + a._1 + "\t" + a._2.method.classType.toS + "." + a._2.name +
                (a._2.sourceLocation match {
                   case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
                   case None => ""
-                  }))
+                }))
+      }
     }
   }
   wrapOutput {
