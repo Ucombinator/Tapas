@@ -22,9 +22,20 @@ class Method(var classType:JavaType, val prototype:Prototype, val name:String) {
   def className = classType.toS
 
   def fullyQualifiedName = className + "." + name
+  
+  def compareTo(o: Method) = {
+    val fqn = className + "::" + name
+    val ofqn = o.className + "::" + o.name
+    fqn.compareTo(ofqn)
+  }
 }
 
 class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) extends Comparable[MethodDef] {
+  
+  def this(method: Method) = {
+    this(method, -1, null)
+  }
+  
   val name = method.name
 
   val visibility = if ((accessFlags & AccessFlags.ACC_PUBLIC) != 0) PublicVisibilityAttr

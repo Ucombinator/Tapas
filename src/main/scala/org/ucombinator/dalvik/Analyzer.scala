@@ -8,10 +8,16 @@ import collection.SortedSet
 import org.ucombinator.dalvik.android.ApkReader
 import org.ucombinator.dalvik.AST._
 import org.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
+import org.ucombinator.dalvik.analysis.MethodDefProxy
 import annotation.tailrec
 import spray.json._
 import DefaultJsonProtocol._
 
+//class JsItem
+//class JsObject(val properties : Map[String,JsItem]) extends JsItem
+//class JsArray(val items : List[JsItem]) extends JsItem
+//class JsNumber(val value : Long) extends JsItem
+//class JsString(val str : String) extends JsItem
 
 object Analyzer extends App {
   var apkFile: String = null
@@ -312,11 +318,12 @@ object Analyzer extends App {
            val cdp = simpleCallGraph.classMap(className)
            if (cdp.methodMap isDefinedAt methodName) {
              (cdp.methodMap(methodName).calls map {
-                mdp => {
-                  val m = if (mdp.method == null)
-                            mdp.methodDef.method
+                calledAt => {
+                  val (callee, callSite) = calledAt
+                  val m = if (callee.method == null)
+                            callee.methodDef.method
                           else
-                            mdp.method
+                            callee.method
                   m.classType.toS + "." + m.name
                 }
               }).mkString(", ")
@@ -341,21 +348,39 @@ object Analyzer extends App {
                    }))
     }
   }
-  def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDef)]) {
-    val json =  JsObject("annotations" -> JsArray((mds map {
-      (a) => { 
-           val (fn : String, line : Long, pos : Long)  = a._2.sourceLocation match {
+  
+  def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDefProxy)]) {
+    val json =   JsObject("annotations" ->  JsArray((mds map {
+      (a) => {
+           val risk = a._1
+           val mdp = a._2
+           val md = if(a._2.methodDef != null) a._2.methodDef else new MethodDef(a._2.method)
+           val (fn : String, line : Long, pos : Long)  = md sourceLocation match {
              case Some((fn,line,pos)) => (fn, line, pos)
              case None => ("none", -1, -1)
            }
-           JsObject("risk_score"        -> JsNumber(a._1), 
-                    "method"            -> JsString(a._2.name),
-                    "file_name"         -> JsString(fn),
-                    "class_name"        -> JsString(a._2.method.classType.toS),
-                    "short_description" -> JsString("<CATEGORY_HERE>"),
-                    "long_description"  -> JsString(""),
-                    "start_line"        -> JsNumber(line),
-                    "start_col"         -> JsNumber(pos)) 
+            JsObject("risk_score"    ->  JsNumber(risk), 
+                    "method"            ->  JsString(md.name),
+                    "file_name"         ->  JsString(fn),
+                    "class_name"        ->  JsString(md.method.classType.toS),
+                    "short_description" ->  JsString("<CATEGORY_HERE>"),
+                    "long_description"  ->  JsString(""),
+                    "start_line"        ->  JsNumber(line),
+                    "start_col"         ->  JsNumber(pos),
+                    "sub_annotations"   ->  JsArray(mdp.calls.filter((calledAt) => {
+                      val (caller, callSite) = calledAt
+                      sourcesAndSinks.sinks.contains(caller.methodDef)
+                    }).map(((calledAt) => {
+                       val (caller, callSite) = calledAt
+                       if(callSite != null) {
+						   JsObject("start_line" ->  JsNumber(callSite.line),
+									"end_line" ->  JsNumber(callSite.line),
+									"start_col" ->  JsNumber(callSite.position),
+									"description" ->  JsString(caller.methodDef.name))
+                       } else {
+                           JsObject("description" -> JsString(caller.methodDef.name))
+                       }
+                    })).toList))
       }
     }).toList))
     println(json.prettyPrint)

@@ -48,8 +48,7 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
   private def buildSetForClassConfig(className: String,
                                      ms: Set[MethodConfig],
                                      classMap: Map[String,ClassDefProxy],
-                                     s: Set[MethodDef]):
-    Set[MethodDef] = {
+                                     s: Set[MethodDef]): Set[MethodDef] = {
     ms.foldLeft(s) {
       (s, mc) => {
         if (classMap isDefinedAt className) {
@@ -57,7 +56,10 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
           val methodName = mc.name
           if (cdp.methodMap isDefinedAt methodName)
             cdp.methodMap(methodName).calledBy.foldLeft(s) {
-              (s, mdp) => if (mdp.methodDef == null) s else s + mdp.methodDef
+              (s, calledAt) => {
+                val (caller, callSite) = calledAt
+                if (caller.methodDef == null) s else s + caller.methodDef
+              }
             }
           else 
             s
@@ -72,23 +74,24 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
 
   private def buildCostsSet(m: Map[String, ClassConfig],
                             classMap: Map[String, ClassDefProxy]):
-    SortedSet[(Int,MethodDef)] = {
-    var mdm = m.foldLeft(Map.empty[MethodDef, Int]) {
+    // want this to be MethodDefProxy instead
+    SortedSet[(Int,MethodDefProxy)] = {
+      var mdm = m.foldLeft(Map.empty[MethodDefProxy, Int]) {
                 (mdm, a) => buildCostsSetForClassConfig(a._1,
                               (if (cs == null || cs.isEmpty)
                                  a._2.methods
                                else
                                  a._2.methodsForCategories(cs)),
                               classMap, mdm)
-              }
-    mdm.foldLeft(SortedSet.empty[(Int,MethodDef)](implicitly[Ordering[(Int,MethodDef)]].reverse)) { (s, a) => s + ((a._2, a._1)) }
+                }
+    mdm.foldLeft(SortedSet.empty[(Int,MethodDefProxy)](implicitly[Ordering[(Int,MethodDefProxy)]].reverse)) { (s, a) => s + ((a._2, a._1)) }
   }
 
   private def buildCostsSetForClassConfig(className: String,
                                           ms: Set[MethodConfig],
                                           classMap: Map[String, ClassDefProxy],
-                                          mdm: Map[MethodDef,Int]):
-    Map[MethodDef, Int] = {
+                                          mdm: Map[MethodDefProxy,Int]):
+    Map[MethodDefProxy, Int] = {
     ms.foldLeft(mdm) {
       (mdm, mc) => {
         if (classMap isDefinedAt className) {
@@ -96,16 +99,18 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
           val methodName = mc.name
           if (cdp.methodMap isDefinedAt methodName) {
             cdp.methodMap(methodName).calledBy.foldLeft(mdm) {
-              (mdm, mdp) => if (mdp.methodDef == null) {
-                              mdm
-                            } else {
-                              val md = mdp.methodDef
-                              if (mdm isDefinedAt md) {
-                                mdm + (md -> (mdm(md) + getCost(mc.category)))
-                              } else {
-                                mdm + (md -> getCost(mc.category))
-                              }
-                            }
+              (mdm, calledAt) => {
+                val (caller, callSite) = calledAt
+                if (caller.methodDef == null) {
+                   mdm
+                } else {
+                  if (mdm isDefinedAt caller) {
+                    mdm + (caller -> (mdm(caller) + getCost(mc.category)))
+                  } else {
+                    mdm + (caller -> getCost(mc.category))
+                  }
+                }
+              }           
             }
           } else {
             mdm

@@ -54,7 +54,7 @@ class ClassDefProxy(val clazz: ClassDef, var methodMap: Map[String, MethodDefPro
   * @param method    the Method object being wrapped by this proxy (when the
   *                  MethodDef is not available)
   */
-class MethodDefProxy(val methodDef: MethodDef, val method: Method) {
+class MethodDefProxy(val methodDef: MethodDef, val method: Method) extends Comparable[MethodDefProxy]{
   /** Constructor for when the MethodDef is available
     * @param methodDef the MethodDef object being wrapped by this proxy
     */
@@ -64,8 +64,8 @@ class MethodDefProxy(val methodDef: MethodDef, val method: Method) {
     */
   def this(method: Method) = this(null, method)
 
-  private var _calledBy = Set.empty[MethodDefProxy]
-  private var _calls    = Set.empty[MethodDefProxy]
+  private var _calledBy = Set.empty[(MethodDefProxy, SourceInfo)]
+  private var _calls    = Set.empty[(MethodDefProxy, SourceInfo)]
 
   /** Setter method for the calls field.  The MethodDefProxy for the called
     * method is stored in a set (so there are no duplicates).
@@ -78,7 +78,7 @@ class MethodDefProxy(val methodDef: MethodDef, val method: Method) {
     * @param callsSet the full set of methods called by this method.
     * @return Unit
     */
-  def calls_=(callsSet: Set[MethodDefProxy]) : Unit = _calls = callsSet
+  def calls_=(callsSet: Set[(MethodDefProxy, SourceInfo)]) : Unit = _calls = callsSet
 
   /** Accessor method for the calls field.
     * @returns a set of MethodDefProxy objects that are called by this method
@@ -96,12 +96,25 @@ class MethodDefProxy(val methodDef: MethodDef, val method: Method) {
     * @param calledBySet the full set of methods that call this method.
     * @return Unit
     */
-  def calledBy_=(calledBySet: Set[MethodDefProxy]) : Unit = _calledBy = calledBySet
+  def calledBy_=(calledBySet: Set[(MethodDefProxy, SourceInfo)]) : Unit = _calledBy = calledBySet
 
   /** Accessor method for the calledBy field.
     * @returns a set of MethodDefProxy objects that call this method
     */
   def calledBy = _calledBy
+  
+  def compareTo(other : MethodDefProxy) = {
+    if(other.methodDef != null && methodDef != null)
+      methodDef.compareTo(other.methodDef)
+    else if(other.method != null && method != null)
+      method.compareTo(other.method)
+    else if(methodDef != null)
+      methodDef.compareTo(new MethodDef(other.method))
+    else
+      method.compareTo(other.methodDef.method);
+      
+  }
+  
 }
 
 /** Class to build the method call graph by looking for call sites and
@@ -149,25 +162,24 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
       }
     }
   
-  protected def addMethod(methodProxy : MethodDefProxy)(calledMethod: Method) {
+  protected def addMethod(caller : MethodDefProxy)(callee: Method, callSite : SourceInfo) {
     def addToClass(clazzProxy: ClassDefProxy) : Unit = {
-      val mdProxy = if (clazzProxy.methodMap isDefinedAt calledMethod.name) {
-        clazzProxy.methodMap(calledMethod.name)
+      val _callee = if (clazzProxy.methodMap isDefinedAt callee.name) {
+        clazzProxy.methodMap(callee.name)
       } else {
-        val mdProxy = new MethodDefProxy(calledMethod)
-        clazzProxy.methodMap += calledMethod.name -> mdProxy
+        val mdProxy = new MethodDefProxy(callee)
+        clazzProxy.methodMap += callee.name -> mdProxy
         mdProxy
       }
-      methodProxy.calls += mdProxy
-      mdProxy.calledBy += methodProxy
+      caller.calls +=((_callee, callSite))
+      _callee.calledBy +=((caller, callSite))
       clazzProxy.subclasses foreach addToClass
     }
-    val className = javaTypeToName(calledMethod.classType)
+    val className = javaTypeToName(callee.classType)
     val classProxy = if (_classMap isDefinedAt className) {
       _classMap(className)
     } else {
-      val classProxy = new ClassDefProxy(null,
-                                         Map.empty[String, MethodDefProxy])
+      val classProxy = new ClassDefProxy(null, Map.empty[String, MethodDefProxy])
       _classMap += className -> classProxy
       classProxy
     }
@@ -175,20 +187,25 @@ class SimpleMethodCallGraph(classes: Array[ClassDef]) {
   }
   
   protected def processInstructions(methodProxy: MethodDefProxy)(code: CodeItem) {
-    val add = addMethod(methodProxy)_
+    val addCallee = addMethod(methodProxy)_
     code.insns foreach {
-      (insn) => insn match {
-        case InvokeSuper(args, b)          => add(b)
-        case InvokeDirect(args, b)         => add(b)
-        case InvokeStatic(args, b)         => add(b)
-        case InvokeInterface(args, b)      => add(b)
-        case InvokeVirtual(args, b)        => add(b)
-        case InvokeVirtualRange(c, a, b)   => add(b)
-        case InvokeSuperRange(c, a, b)     => add(b)
-        case InvokeDirectRange(c, a, b)    => add(b)
-        case InvokeStaticRange(c, a, b)    => add(b)
-        case InvokeInterfaceRange(c, a, b) => add(b)
-        case _                             => false
+      (insn) => {
+        val method = insn match {
+	        case InvokeSuper(args, b)          => b
+	        case InvokeDirect(args, b)         => b
+	        case InvokeStatic(args, b)         => b
+	        case InvokeInterface(args, b)      => b
+	        case InvokeVirtual(args, b)        => b
+	        case InvokeVirtualRange(c, a, b)   => b
+	        case InvokeSuperRange(c, a, b)     => b
+	        case InvokeDirectRange(c, a, b)    => b
+	        case InvokeStaticRange(c, a, b)    => b
+	        case InvokeInterfaceRange(c, a, b) => b
+	        case _                             => null
+        }
+        if(method != null) {
+          addCallee(method, insn.sourceInfo)
+        }
       }
     }
   }
