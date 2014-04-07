@@ -75,7 +75,9 @@ class ClassDef(val name: String, val accessFlags: Long, var superClass: JavaType
 
   lazy val fields = combine[FieldDef](instanceFields, staticFields)
 
-  lazy val methods = combine[MethodDef](directMethods, virtualMethods)
+  // dropping bridge methods since they are compiler generated and do not add
+  // useful call site analysis at this point
+  lazy val methods = combine[MethodDef](directMethods, virtualMethods).filter((md) => !md.isBridge)
 
   lazy val methodMap = methods.foldLeft(Map.empty[String,MethodDef])((map, meth) => map + (meth.name -> meth))
   

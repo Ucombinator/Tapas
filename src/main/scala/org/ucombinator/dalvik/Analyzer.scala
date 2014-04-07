@@ -359,26 +359,45 @@ object Analyzer extends App {
              case Some((fn,line,pos)) => (fn, line, pos)
              case None => ("none", -1, -1)
            }
-            JsObject("risk_score"    ->  JsNumber(risk), 
-                    "method"            ->  JsString(md.name),
-                    "file_name"         ->  JsString(fn),
-                    "class_name"        ->  JsString(md.method.classType.toS),
-                    "short_description" ->  JsString("<CATEGORY_HERE>"),
-                    "long_description"  ->  JsString(""),
-                    "start_line"        ->  JsNumber(line),
-                    "start_col"         ->  JsNumber(pos),
-                    "sub_annotations"   ->  JsArray(mdp.calls.filter((calledAt) => {
-                      val (caller, callSite) = calledAt
-                      sourcesAndSinks.sinks.contains(caller.methodDef)
-                    }).map(((calledAt) => {
-                       val (caller, callSite) = calledAt
+           
+           // TODO restructure the config to be better suited to testing membership
+           //val sinks = config.sinkMap.toList.map((classCfg) => {
+           //  classCfg.methods.toList.foreach((meth) => (meth -> ))
+           //})
+
+           JsObject("risk_score"       -> JsNumber(risk), 
+                    "method"            -> JsString(md.name),
+                    "file_name"         -> JsString(fn),
+                    "class_name"        -> JsString(md.method.classType.toS),
+                    "short_description" -> JsString("<ADD_CATEGORY_HERE>"),
+                    "long_description"  -> JsString(""),
+                    "start_line"        -> JsNumber(line),
+                    "start_col"         -> JsNumber(pos),
+                    "sub_annotations"   -> JsArray(mdp.calls
+                    /*.filter((calledAt) => {
+                       val (callee, callSite) = calledAt
+                       val method = if(callee.methodDef != null) { 
+                         callee.methodDef.method 
+                       } else { 
+                         callee.method
+                       }
+                       sinks.contains(method.className + method.name)
+                    })*/.map(((calledAt) => {
+                       val (callee, callSite) = calledAt
+                       val method = if(callee.methodDef != null) { 
+                         callee.methodDef.method
+                       } else { 
+                         callee.method 
+                       }
+                   
+                       
                        if(callSite != null) {
-						   JsObject("start_line" ->  JsNumber(callSite.line),
-									"end_line" ->  JsNumber(callSite.line),
-									"start_col" ->  JsNumber(callSite.position),
-									"description" ->  JsString(caller.methodDef.name))
+						              JsObject("start_line"  -> JsNumber(callSite.line),
+									                 "end_line"    -> JsNumber(callSite.line),
+									                 "start_col"   -> JsNumber(callSite.position),
+									                 "description" -> JsString(method.fullyQualifiedName))
                        } else {
-                           JsObject("description" -> JsString(caller.methodDef.name))
+                           JsObject("description" -> JsString(method.fullyQualifiedName))
                        }
                     })).toList))
       }
@@ -399,6 +418,9 @@ object Analyzer extends App {
     // println
     println("Methods that call sources or sinks (higher numbers indicate more hits): ")
     printMethodsWithCostAndSources(sourcesAndSinks.methodCosts)
+    sourcesAndSinks.sinks.toList.foreach((snk) => {
+       println(snk.name)
+    })
     println
   }
 }

@@ -1,5 +1,5 @@
 
-name := "My Project"
+name := "Tapas"
 
 version := "1.0"
 

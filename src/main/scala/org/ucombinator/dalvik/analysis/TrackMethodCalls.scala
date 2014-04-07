@@ -73,25 +73,26 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
   private def getCost(s: Symbol): Int = if (costs isDefinedAt s) costs(s) else 5
 
   private def buildCostsSet(m: Map[String, ClassConfig],
-                            classMap: Map[String, ClassDefProxy]):
+                            classMap: Map[String, ClassDefProxy]): SortedSet[(Int,MethodDefProxy)] = {
     // want this to be MethodDefProxy instead
-    SortedSet[(Int,MethodDefProxy)] = {
-      var mdm = m.foldLeft(Map.empty[MethodDefProxy, Int]) {
-                (mdm, a) => buildCostsSetForClassConfig(a._1,
-                              (if (cs == null || cs.isEmpty)
-                                 a._2.methods
-                               else
-                                 a._2.methodsForCategories(cs)),
-                              classMap, mdm)
-                }
-    mdm.foldLeft(SortedSet.empty[(Int,MethodDefProxy)](implicitly[Ordering[(Int,MethodDefProxy)]].reverse)) { (s, a) => s + ((a._2, a._1)) }
+    var mdm = m.foldLeft(Map.empty[MethodDefProxy, Int]) {
+        (mdm, a) => buildCostsSetForClassConfig(a._1,
+                      (if (cs == null || cs.isEmpty)
+                         a._2.methods
+                       else
+                         a._2.methodsForCategories(cs)),
+                      classMap, mdm)
+    }
+    // what's going on here? 
+    mdm.foldLeft(SortedSet.empty[(Int,MethodDefProxy)](implicitly[Ordering[(Int,MethodDefProxy)]].reverse)) { 
+      (s, a) => s + ((a._2, a._1)) 
+    }
   }
 
   private def buildCostsSetForClassConfig(className: String,
                                           ms: Set[MethodConfig],
                                           classMap: Map[String, ClassDefProxy],
-                                          mdm: Map[MethodDefProxy,Int]):
-    Map[MethodDefProxy, Int] = {
+                                          mdm: Map[MethodDefProxy,Int]): Map[MethodDefProxy, Int] = {
     ms.foldLeft(mdm) {
       (mdm, mc) => {
         if (classMap isDefinedAt className) {

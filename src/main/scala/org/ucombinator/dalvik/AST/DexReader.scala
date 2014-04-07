@@ -138,7 +138,7 @@ class DexReader(ch:FileChannel) {
   private val VALUE_NULL = 0x1e
   private val VALUE_BOOLEAN = 0x1f
 
-  /* debugging state machine insturctions (not including extended instructions) */
+  /* debugging state machine instructions (not including extended instructions) */
   private val DBG_END_SEQUENCE = 0x00
   private val DBG_ADVANCE_PC = 0x01
   private val DBG_ADVANCE_LINE = 0x02
@@ -882,10 +882,17 @@ class DexReader(ch:FileChannel) {
     var insns = SortedMap.empty[Int,Instruction]
     var shortOffset = 0
     var debugTable = if (debugInfo == null) Map.empty[Long,SourceInfo] else debugInfo.debugTable
+    var prevSourceInfo : SourceInfo = null;
     while(shortOffset < shortCount) {
       val (shortsRead, instruction) = readInstruction
-      if (debugTable isDefinedAt shortOffset.toLong)
-        instruction.sourceInfo = debugTable(shortOffset.toLong)
+      if (debugTable isDefinedAt shortOffset.toLong) {
+        prevSourceInfo = debugTable(shortOffset.toLong)
+        instruction.sourceInfo = prevSourceInfo
+      } else {
+        // println("NO SOURCE INFO FOR: " + instruction.toS() + 
+        //         " using previous available source info with line: " + prevSourceInfo.line)
+        instruction.sourceInfo = prevSourceInfo
+      }
       insns += shortOffset -> instruction
       shortOffset += shortsRead
     }

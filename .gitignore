@@ -8,3 +8,6 @@ bin
 .*.sw?
 .sw?
 target
+.settings
+.classpath
+.project
