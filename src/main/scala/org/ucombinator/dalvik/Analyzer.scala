@@ -7,8 +7,8 @@ import io.Source
 import collection.SortedSet
 import org.ucombinator.dalvik.android.ApkReader
 import org.ucombinator.dalvik.AST._
-import org.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer, SourceSinkConfig}
-import org.ucombinator.dalvik.analysis.MethodDefProxy
+import org.ucombinator.dalvik.analysis.{SimpleMethodCallGraph, SourceSinkMethodCallAnalyzer}
+import org.ucombinator.dalvik.analysis.{MethodDefProxy, SourceSinkConfig, MethodConfig, ClassConfig}
 import annotation.tailrec
 import spray.json._
 import DefaultJsonProtocol._
@@ -292,7 +292,7 @@ object Analyzer extends App {
 
   // first step at separting out the category information.
   val config = new SourceSinkConfig(configFile)
-  config.addMethods(additionalMethods)
+  config.addOtherMethods(additionalMethods)
 
   if (apkFile == null) {
     if (listCategories) {
@@ -336,7 +336,7 @@ object Analyzer extends App {
     }
   }
 
-  // Look, a real, if (very, very) simple, analyzsis
+  // Look, a real, if (very, very) simple, analysis
   val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config,
                           simpleCallGraph, limitToCategories, costSpecification)
   def printMethodsAndSources(mds: Set[MethodDef]) {
@@ -361,11 +361,17 @@ object Analyzer extends App {
            }
            
            // TODO restructure the config to be better suited to testing membership
-           //val sinks = config.sinkMap.toList.map((classCfg) => {
-           //  classCfg.methods.toList.foreach((meth) => (meth -> ))
-           //})
-
-           JsObject("risk_score"       -> JsNumber(risk), 
+           var sinks = Map[String, (ClassConfig, MethodConfig)]().empty;
+           config.sinkMap.toList.foreach((classCfgPair) => {
+             val (className, classCfg) = classCfgPair
+             
+             classCfg.methods.toList.foreach((meth) => {
+               //println("adding mapping: " + classCfg.name + '.' + meth.name)
+               sinks += (classCfg.name + '.' + meth.name -> (classCfg, meth))
+             })
+           })
+           
+           JsObject("risk_score"        -> JsNumber(risk), 
                     "method"            -> JsString(md.name),
                     "file_name"         -> JsString(fn),
                     "class_name"        -> JsString(md.method.classType.toS),
@@ -373,31 +379,29 @@ object Analyzer extends App {
                     "long_description"  -> JsString(""),
                     "start_line"        -> JsNumber(line),
                     "start_col"         -> JsNumber(pos),
-                    "sub_annotations"   -> JsArray(mdp.calls
-                    /*.filter((calledAt) => {
+                    "sub_annotations"   -> JsArray(mdp.calls.filter((calledAt) => {
                        val (callee, callSite) = calledAt
                        val method = if(callee.methodDef != null) { 
                          callee.methodDef.method 
                        } else { 
                          callee.method
                        }
-                       sinks.contains(method.className + method.name)
-                    })*/.map(((calledAt) => {
-                       val (callee, callSite) = calledAt
-                       val method = if(callee.methodDef != null) { 
-                         callee.methodDef.method
-                       } else { 
-                         callee.method 
-                       }
-                   
                        
-                       if(callSite != null) {
-						              JsObject("start_line"  -> JsNumber(callSite.line),
-									                 "end_line"    -> JsNumber(callSite.line),
-									                 "start_col"   -> JsNumber(callSite.position),
-									                 "description" -> JsString(method.fullyQualifiedName))
+                       val result = sinks isDefinedAt method.className + "." + method.name
+                       //println("[" + result + "] " + method.className + "." + method.name)
+                       result
+                    }).map(((calledAt) => {
+                       val (callee, callSite) = calledAt
+                       val method = if(callee.methodDef != null) callee.methodDef.method else callee.method 
+                       if(callSite != null) {                         
+							JsObject("start_line"  -> JsNumber(callSite.line),
+									 "end_line"    -> JsNumber(callSite.line),
+									 "start_col"   -> JsNumber(callSite.position),
+									 "method"       -> JsString(method.name),
+									 "description" -> JsString(method.fullyQualifiedName))
                        } else {
-                           JsObject("description" -> JsString(method.fullyQualifiedName))
+                           JsObject("description" -> JsString(method.fullyQualifiedName),
+                                    "method"       -> JsString(method.name))
                        }
                     })).toList))
       }

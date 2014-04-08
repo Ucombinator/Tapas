@@ -75,16 +75,9 @@ class MethodDef(val method:Method, val accessFlags:Long, val code:CodeItem) exte
   // the sourceLocation of the method def is approximated by
   // the source location of the first instruction with sourceInfo available
   def sourceLocation: Option[(String,Long,Long)] = {
-    if(name == "doInBackground") println("DO_IN_BACKGROUND " + method.className)
     code.insns.find { (insn) => insn.sourceInfo != null } match {
-      case Some(insn) => {
-        if(name == "doInBackground") 
-          println(insn.toS()); 
-        Some((insn.sourceInfo.fn, insn.sourceInfo.line, insn.sourceInfo.position))
-      }
-      case None => { 
-        None; 
-      }
+      case Some(insn) => Some((insn.sourceInfo.fn, insn.sourceInfo.line, insn.sourceInfo.position))
+      case None => None; 
     }
   }
 

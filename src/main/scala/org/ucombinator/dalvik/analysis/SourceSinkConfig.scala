@@ -2,6 +2,17 @@ package org.ucombinator.dalvik.analysis
 
 import xml.{XML, NodeSeq}
 
+
+object MethodConfig {
+  def dexNameFromClassName(className : String) = {
+    "L" + className.replace(".", "/") + ";"    
+  }
+  def classNameFromDexName(dexName: String) = {
+    // remove L prefix and trailing ;
+    dexName.substring(1, dexName.length() - 2).replace("/", ".")
+  }
+}
+
 class MethodConfig(val name: String, val category: Symbol, val owner: ClassConfig) {
   override def equals(a: Any): Boolean = a match {
     case other: MethodConfig => name.equals(other.name) && category.equals(other.category)
@@ -9,7 +20,7 @@ class MethodConfig(val name: String, val category: Symbol, val owner: ClassConfi
   }
 }
 
-class ClassConfig(val name: String,
+class ClassConfig(val dexName: String, val name: String,
   var methods: Set[MethodConfig] = Set.empty[MethodConfig]) {
   def addMethod(name: String, category: String): Unit =
     methods += new MethodConfig(name,Symbol(category),this)
@@ -46,17 +57,19 @@ class SourceSinkConfig(fn: String) {
     root.foldLeft(Map.empty[String, ClassConfig]) {
       (s, node) => (node \ "method").foldLeft(s) {
         (s, node) => {
-          val className = "L" +
-            (node \ "@class-name").toString.replace(".", "/") + ";"
-          val methodName = (node \ "@name").toString
-          val category = (node \ "@category").toString
-          if (s isDefinedAt className) {
-            s(className).addMethod(methodName, category)
+          val className = (node \ "@class-name").text.toString()
+          val dexClassName = "L" +
+            className.replace(".", "/") + ";"
+          val methodName = (node \ "@name").text.toString
+          //println("method from xml: " + methodName)
+          val category = (node \ "@category").text.toString
+          if (s isDefinedAt dexClassName) {
+            s(dexClassName).addMethod(methodName, category)
             s
           } else {
-            val cc = new ClassConfig(className)
+            val cc = new ClassConfig(dexClassName, className)
             cc.addMethod(methodName, category)
-            s + (className -> cc)
+            s + (dexClassName -> cc)
           }
         }
       }
@@ -82,17 +95,20 @@ class SourceSinkConfig(fn: String) {
   private var _sourceMap = buildMap(xmlFile \ "sources")
   private var _sinkMap = buildMap(xmlFile \ "sinks")
   private var _otherMap = buildMap(xmlFile \ "other")
-
-  def addMethods(ms: List[(String,String,String)]) = {
+  
+  // used for adding additional methods that are not sources or sinks
+  def addOtherMethods(ms: List[(String,String,String)]) = {
     ms foreach {
       (m) => {
-        val className = m._1
-        if (_otherMap isDefinedAt m._1) {
-          _otherMap(m._1).addMethod(m._2, m._3)
+        val (className, method, cat) = m
+        if (_otherMap isDefinedAt className) {
+          _otherMap(className).addMethod(method, cat)
         } else {
-          val cc = new ClassConfig(m._1)
-          cc.addMethod(m._2, m._3)
-          _otherMap += (m._1 -> cc)
+          // adding other methods requires them to be in package format ("pkg.name"), 
+          // not dex format ("Lpkg/name;")
+          val cc = new ClassConfig(MethodConfig.dexNameFromClassName(className), className)
+          cc.addMethod(method, cat)
+          _otherMap += (className -> cc)
         }
       }
     }
