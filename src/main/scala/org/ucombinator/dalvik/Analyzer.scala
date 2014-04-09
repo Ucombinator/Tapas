@@ -352,31 +352,67 @@ object Analyzer extends App {
   def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDefProxy)]) {
     val json =   JsObject("annotations" ->  JsArray((mds map {
       (a) => {
-           val risk = a._1
-           val mdp = a._2
-           val md = if(a._2.methodDef != null) a._2.methodDef else new MethodDef(a._2.method)
+           val (risk, mdp) = a
+           val md = if(mdp.methodDef != null) mdp.methodDef else new MethodDef(mdp.method)
            val (fn : String, line : Long, pos : Long)  = md sourceLocation match {
              case Some((fn,line,pos)) => (fn, line, pos)
              case None => ("none", -1, -1)
            }
            
+           var costs = Map[String, Int]().empty;
+           sourcesAndSinks.methodCosts.toList.foreach((costPair) => {
+             val (cost, mdp) = costPair
+             val method = if(mdp.method != null) mdp.method else mdp.methodDef.method
+             if(method != null)
+               costs += (method.fullyQualifiedName -> cost)
+             else
+               println("method is undefined with cost " + cost + 
+                   " called by " + mdp.calledBy.toList.length + " calls " + mdp.calls.toList.length)
+               
+           })
+           
            // TODO restructure the config to be better suited to testing membership
-           var sinks = Map[String, (ClassConfig, MethodConfig)]().empty;
+           var sinks = Map[String, MethodConfig]().empty;
            config.sinkMap.toList.foreach((classCfgPair) => {
              val (className, classCfg) = classCfgPair
              
              classCfg.methods.toList.foreach((meth) => {
                //println("adding mapping: " + classCfg.name + '.' + meth.name)
-               sinks += (classCfg.name + '.' + meth.name -> (classCfg, meth))
+               sinks += (classCfg.name + '.' + meth.name -> meth)
              })
            })
            
+           var sources = Map[String, MethodConfig]().empty;
+           config.sourceMap.toList.foreach((classCfgPair) => {
+             val (className, classCfg) = classCfgPair
+             
+             classCfg.methods.toList.foreach((meth) => {
+               //println("adding mapping: " + classCfg.name + '.' + meth.name)
+               sources += (classCfg.name + '.' + meth.name -> meth)
+             })
+           })
+           
+           var otherMethods = Map[String, MethodConfig]().empty;
+           config.otherMap.toList.foreach((classCfgPair) => {
+             val (className, classCfg) = classCfgPair
+             
+             classCfg.methods.toList.foreach((meth) => {
+               //println("adding mapping: " + classCfg.name + '.' + meth.name)
+               otherMethods += (classCfg.name + '.' + meth.name -> meth)
+             })
+           })
+           
+           val fullNm = md.method.fullyQualifiedName
+           val isSource = sources.isDefinedAt(fullNm)
+
            JsObject("risk_score"        -> JsNumber(risk), 
                     "method"            -> JsString(md.name),
                     "file_name"         -> JsString(fn),
                     "class_name"        -> JsString(md.method.classType.toS),
-                    "short_description" -> JsString("<ADD_CATEGORY_HERE>"),
-                    "long_description"  -> JsString(""),
+                    "short_description" -> JsString(if(isSource) "source" else ""),
+                    "long_description"  -> JsString(if(isSource) {
+							                          sources(fullNm).category.name.toString()
+							                    	} else ""),
                     "start_line"        -> JsNumber(line),
                     "start_col"         -> JsNumber(pos),
                     "sub_annotations"   -> JsArray(mdp.calls.filter((calledAt) => {
@@ -386,22 +422,37 @@ object Analyzer extends App {
                        } else { 
                          callee.method
                        }
-                       
-                       val result = sinks isDefinedAt method.className + "." + method.name
+                       val key = method.fullyQualifiedName;
+                       val result = (sinks.isDefinedAt(key) ||
+			                         sources.isDefinedAt(key) ||
+			                         otherMethods.isDefinedAt(key))
                        //println("[" + result + "] " + method.className + "." + method.name)
                        result
                     }).map(((calledAt) => {
                        val (callee, callSite) = calledAt
                        val method = if(callee.methodDef != null) callee.methodDef.method else callee.method 
+                       val fullNm = method.fullyQualifiedName
+                       val calleeCost = if(costs.isDefinedAt(fullNm)) costs(fullNm) else 0
+                       val category = if(sinks.isDefinedAt(fullNm)) 
+				                         sinks(fullNm).category.name.toString();
+				                      else if(sources.isDefinedAt(fullNm)) 
+				                         sources(fullNm).category.name.toString()
+				                      else if(otherMethods.isDefinedAt(fullNm)) 
+				                        otherMethods(fullNm).category.name.toString()
+				                      else ""
+			                                        
                        if(callSite != null) {                         
 							JsObject("start_line"  -> JsNumber(callSite.line),
 									 "end_line"    -> JsNumber(callSite.line),
 									 "start_col"   -> JsNumber(callSite.position),
-									 "method"       -> JsString(method.name),
-									 "description" -> JsString(method.fullyQualifiedName))
+									 "method"      -> JsString(method.name),
+									 "class_name"  -> JsString(method.classType.toS),
+									 "risk_score"  -> JsNumber(calleeCost), 
+									 "description" -> JsString(category))
                        } else {
-                           JsObject("description" -> JsString(method.fullyQualifiedName),
-                                    "method"       -> JsString(method.name))
+                           JsObject("method"      -> JsString(method.name),
+									"class_name"  -> JsString(method.classType.toS),
+									"description" -> JsString(category))
                        }
                     })).toList))
       }

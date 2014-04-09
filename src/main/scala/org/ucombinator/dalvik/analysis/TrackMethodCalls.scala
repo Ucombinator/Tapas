@@ -24,6 +24,9 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
         simpleCallGraph: SimpleMethodCallGraph,
         cs: Set[Symbol], costs: Map[Symbol, Int]) {
 
+  // the default cost of an unmapped category cost
+  private def DEFAULT_COST = 5;
+  
   // TODO: to finish this we need to:
   // a) have a version of this that will take a set of categories
   // b) make it use the set of categories pair down the list of methods to report on
@@ -70,22 +73,29 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
     }
   }
 
-  private def getCost(s: Symbol): Int = if (costs isDefinedAt s) costs(s) else 5
+  private def getCost(s: Symbol): Int = if (costs isDefinedAt s) costs(s) else DEFAULT_COST
 
   private def buildCostsSet(m: Map[String, ClassConfig],
                             classMap: Map[String, ClassDefProxy]): SortedSet[(Int,MethodDefProxy)] = {
     // want this to be MethodDefProxy instead
     var mdm = m.foldLeft(Map.empty[MethodDefProxy, Int]) {
-        (mdm, a) => buildCostsSetForClassConfig(a._1,
+        (mdm, a) => { 
+          val (className, classCfg) = a
+          buildCostsSetForClassConfig(className,
                       (if (cs == null || cs.isEmpty)
-                         a._2.methods
+                         classCfg.methods
                        else
-                         a._2.methodsForCategories(cs)),
+                         classCfg.methodsForCategories(cs)), 
                       classMap, mdm)
+        }
     }
-    // what's going on here? 
-    mdm.foldLeft(SortedSet.empty[(Int,MethodDefProxy)](implicitly[Ordering[(Int,MethodDefProxy)]].reverse)) { 
-      (s, a) => s + ((a._2, a._1)) 
+    // order by cost
+    mdm.foldLeft(SortedSet.empty[(Int,MethodDefProxy)](
+            implicitly[Ordering[(Int,MethodDefProxy)]].reverse)) { 
+      (s, a) => {
+        val (mdProxy, cost) = a;
+        s + ((cost, mdProxy)) 
+      }
     }
   }
 
