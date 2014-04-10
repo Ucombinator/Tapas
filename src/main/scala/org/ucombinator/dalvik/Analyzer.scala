@@ -12,6 +12,23 @@ import org.ucombinator.dalvik.analysis.{MethodDefProxy, SourceSinkConfig, Method
 import annotation.tailrec
 import spray.json._
 import DefaultJsonProtocol._
+import java.io.{FileWriter, PrintWriter}
+
+/**
+ * Used for reading/writing to database, files, etc.
+ * Code From the book "Beginning Scala"
+ * http://www.amazon.com/Beginning-Scala-David-Pollak/dp/1430219890
+ */
+
+object FileUtils {
+	def using[A <: {def close(): Unit}, B](param: A)(f: A => B): B =
+	try { f(param) } finally { param.close() }
+	
+	def writeToFile(fileName:String, data:String) = 
+	  using (new FileWriter(fileName)) {
+	    fileWriter => fileWriter.write(data)
+	  }
+}
 
 //class JsItem
 //class JsObject(val properties : Map[String,JsItem]) extends JsItem
@@ -394,7 +411,7 @@ object Analyzer extends App {
   
   }
   
-  def printCallGraph(mds: SortedSet[(Int,MethodDefProxy)]) {
+  def renderCallGraph(mds: SortedSet[(Int,MethodDefProxy)]) : String = {
     val callGraph = JsObject(mds.foldLeft(Map[String, JsValue]().empty) { 
       (mappings, riskPair) => {
        val (risk, mdp) = riskPair
@@ -404,27 +421,24 @@ object Analyzer extends App {
          case None => ("none", -1, -1)
        }
        mappings + (md.method.fullyQualifiedSignature.toString() -> JsObject(
-           "file" -> JsString(filename),
-           "line" -> JsNumber(line),
-           "col" -> JsNumber(pos),
+           "file"  -> JsString(filename),
+           "line"  -> JsNumber(line),
+           "col"   -> JsNumber(pos),
            "calls" -> JsArray(mdp.calls.map((calledAt) => {
               val (calleeProxy, callSite) = calledAt
               val calleeMethod = if(calleeProxy.methodDef != null) calleeProxy.methodDef.method else calleeProxy.method
               JsObject("method" -> JsString(calleeMethod.fullyQualifiedSignature),
-                       "line" -> JsNumber(callSite.line),
-                       "col" ->  JsNumber(callSite.position))
+                       "line"   -> JsNumber(callSite.line),
+                       "col"    -> JsNumber(callSite.position))
             }).toList)
         ))
       }
     })
-
-    val json = JsObject("call_graph" ->  callGraph)
-    println(json.prettyPrint)
+    JsObject("call_graph" ->  callGraph).prettyPrint
   }
   
-  def printAnnotations(mds: SortedSet[(Int,MethodDefProxy)]) {
-
-    val json = JsObject("annotations" ->  JsArray((mds map {
+  def renderAnnotations(mds: SortedSet[(Int,MethodDefProxy)]) : String = {
+    val annotations = JsArray((mds map {
       (a) => {
            val (risk, mdp) = a
            val md = if(mdp.methodDef != null) mdp.methodDef else new MethodDef(mdp.method)
@@ -476,9 +490,9 @@ object Analyzer extends App {
 								"description" -> JsString(category))
                     })).toList))
       }
-    }).toList))
-    println(json.prettyPrint)
-   
+    }).toList)
+    
+    JsObject("annotations" -> annotations).prettyPrint
   }
   wrapOutput {
     /* setting this aside in favor of the cost-sorted analysis */
@@ -491,7 +505,13 @@ object Analyzer extends App {
     // println("Methods that call other interesting methods (non-exhaustive): ")
     // printMethodsAndSources(sourcesAndSinks.other)
     // println
-    printCallGraph(sourcesAndSinks.methodCosts)
-    //printAnnotations(sourcesAndSinks.methodCosts)
   }
+  
+  val apkName = if (apkFile != null) {
+      apkFile.split('/').last.replace(".apk", "").toLowerCase()
+  }
+  FileUtils.writeToFile(apkName + "_callgraph.json", 
+      renderCallGraph(sourcesAndSinks.methodCosts))
+  FileUtils.writeToFile(apkName + "_risk.json", 
+      renderAnnotations(sourcesAndSinks.methodCosts))
 }
