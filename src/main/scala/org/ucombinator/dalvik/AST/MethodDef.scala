@@ -20,8 +20,13 @@ class Method(var classType:JavaType, val prototype:Prototype, val name:String) {
   }
 
   def className = classType.toS
+  
+  def parameters: Array[JavaType] = prototype.parameters
 
   def fullyQualifiedName = className + "." + name
+  
+  val fullyQualifiedSignature = fullyQualifiedName + "(" + 
+    (if(parameters != null) parameters.map((p) => p.toS()).mkString(",") else "") + ")"
   
   def compareTo(o: Method) = {
     val fqn = className + "::" + name

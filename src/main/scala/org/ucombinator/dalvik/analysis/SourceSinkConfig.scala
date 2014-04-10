@@ -2,8 +2,8 @@ package org.ucombinator.dalvik.analysis
 
 import xml.{XML, NodeSeq}
 
-
 object MethodConfig {
+  def DEFAULT_COST = 5
   def dexNameFromClassName(className : String) = {
     "L" + className.replace(".", "/") + ";"    
   }
@@ -18,6 +18,7 @@ class MethodConfig(val name: String, val category: Symbol, val owner: ClassConfi
     case other: MethodConfig => name.equals(other.name) && category.equals(other.category)
     case _                   => false
   }
+  def fullyQualifiedName = owner.name + "." + name
 }
 
 class ClassConfig(val dexName: String, val name: String,

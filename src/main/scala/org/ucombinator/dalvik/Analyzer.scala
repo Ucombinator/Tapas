@@ -339,6 +339,47 @@ object Analyzer extends App {
   // Look, a real, if (very, very) simple, analysis
   val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config,
                           simpleCallGraph, limitToCategories, costSpecification)
+
+   var costs = Map[String, Int]().empty;
+   sourcesAndSinks.methodCosts.toList.foreach((costPair) => {
+     val (cost, mdp) = costPair
+     val method = if(mdp.method != null) mdp.method else mdp.methodDef.method
+     if(method != null)
+       costs += (method.fullyQualifiedName -> cost)
+     else
+       println("ERROR: method mis undefined in methodCosts")
+       
+   })
+   
+   // TODO restructure the config to be better suited to testing membership
+   var sinks = Map[String, MethodConfig]().empty;
+   config.sinkMap.toList.foreach((classCfgPair) => {
+     val (className, classCfg) = classCfgPair
+     
+     classCfg.methods.toList.foreach((meth) => {
+       sinks += (meth.fullyQualifiedName -> meth)
+     })
+   })
+	   
+   var sources = Map[String, MethodConfig]().empty;
+   config.sourceMap.toList.foreach((classCfgPair) => {
+     val (className, classCfg) = classCfgPair
+     
+     classCfg.methods.toList.foreach((meth) => {
+       sources += (meth.fullyQualifiedName -> meth)
+     })
+   })
+   
+   var otherMethods = Map[String, MethodConfig]().empty;
+   config.otherMap.toList.foreach((classCfgPair) => {
+     val (className, classCfg) = classCfgPair
+     
+     classCfg.methods.toList.foreach((meth) => {
+       otherMethods += (meth.fullyQualifiedName -> meth)
+     })
+   })
+  
+  
   def printMethodsAndSources(mds: Set[MethodDef]) {
     mds foreach {
       (md) => println("  " + md.method.classType.toS + "." + md.name +
@@ -350,7 +391,40 @@ object Analyzer extends App {
   }
   
   def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDefProxy)]) {
-    val json =   JsObject("annotations" ->  JsArray((mds map {
+  
+  }
+  
+  def printCallGraph(mds: SortedSet[(Int,MethodDefProxy)]) {
+    val callGraph = JsObject(mds.foldLeft(Map[String, JsValue]().empty) { 
+      (mappings, riskPair) => {
+       val (risk, mdp) = riskPair
+       val md = if(mdp.methodDef != null) mdp.methodDef else new MethodDef(mdp.method)
+       val (filename : String, line : Long, pos : Long)  = md sourceLocation match {
+         case Some((fn,line,pos)) => (fn, line, pos)
+         case None => ("none", -1, -1)
+       }
+       mappings + (md.method.fullyQualifiedSignature.toString() -> JsObject(
+           "file" -> JsString(filename),
+           "line" -> JsNumber(line),
+           "col" -> JsNumber(pos),
+           "calls" -> JsArray(mdp.calls.map((calledAt) => {
+              val (calleeProxy, callSite) = calledAt
+              val calleeMethod = if(calleeProxy.methodDef != null) calleeProxy.methodDef.method else calleeProxy.method
+              JsObject("method" -> JsString(calleeMethod.fullyQualifiedSignature),
+                       "line" -> JsNumber(callSite.line),
+                       "col" ->  JsNumber(callSite.position))
+            }).toList)
+        ))
+      }
+    })
+
+    val json = JsObject("call_graph" ->  callGraph)
+    println(json.prettyPrint)
+  }
+  
+  def printAnnotations(mds: SortedSet[(Int,MethodDefProxy)]) {
+
+    val json = JsObject("annotations" ->  JsArray((mds map {
       (a) => {
            val (risk, mdp) = a
            val md = if(mdp.methodDef != null) mdp.methodDef else new MethodDef(mdp.method)
@@ -358,81 +432,33 @@ object Analyzer extends App {
              case Some((fn,line,pos)) => (fn, line, pos)
              case None => ("none", -1, -1)
            }
-           
-           var costs = Map[String, Int]().empty;
-           sourcesAndSinks.methodCosts.toList.foreach((costPair) => {
-             val (cost, mdp) = costPair
-             val method = if(mdp.method != null) mdp.method else mdp.methodDef.method
-             if(method != null)
-               costs += (method.fullyQualifiedName -> cost)
-             else
-               println("method is undefined with cost " + cost + 
-                   " called by " + mdp.calledBy.toList.length + " calls " + mdp.calls.toList.length)
-               
-           })
-           
-           // TODO restructure the config to be better suited to testing membership
-           var sinks = Map[String, MethodConfig]().empty;
-           config.sinkMap.toList.foreach((classCfgPair) => {
-             val (className, classCfg) = classCfgPair
-             
-             classCfg.methods.toList.foreach((meth) => {
-               //println("adding mapping: " + classCfg.name + '.' + meth.name)
-               sinks += (classCfg.name + '.' + meth.name -> meth)
-             })
-           })
-           
-           var sources = Map[String, MethodConfig]().empty;
-           config.sourceMap.toList.foreach((classCfgPair) => {
-             val (className, classCfg) = classCfgPair
-             
-             classCfg.methods.toList.foreach((meth) => {
-               //println("adding mapping: " + classCfg.name + '.' + meth.name)
-               sources += (classCfg.name + '.' + meth.name -> meth)
-             })
-           })
-           
-           var otherMethods = Map[String, MethodConfig]().empty;
-           config.otherMap.toList.foreach((classCfgPair) => {
-             val (className, classCfg) = classCfgPair
-             
-             classCfg.methods.toList.foreach((meth) => {
-               //println("adding mapping: " + classCfg.name + '.' + meth.name)
-               otherMethods += (classCfg.name + '.' + meth.name -> meth)
-             })
-           })
-           
-           val fullNm = md.method.fullyQualifiedName
-           val isSource = sources.isDefinedAt(fullNm)
-
+           val fullName  = md.method.fullyQualifiedName
+           val isSource  = sources.isDefinedAt(fullName)
+           val longDesc  = if(isSource) sources(fullName).category.name.toString() else "other"
+           val shortDesc = if(isSource) "source" else ""
            JsObject("risk_score"        -> JsNumber(risk), 
                     "method"            -> JsString(md.name),
                     "file_name"         -> JsString(fn),
                     "class_name"        -> JsString(md.method.classType.toS),
-                    "short_description" -> JsString(if(isSource) "source" else ""),
-                    "long_description"  -> JsString(if(isSource) {
-							                          sources(fullNm).category.name.toString()
-							                    	} else ""),
+                    "short_description" -> JsString(shortDesc),
+                    "long_description"  -> JsString(longDesc),
                     "start_line"        -> JsNumber(line),
                     "start_col"         -> JsNumber(pos),
                     "sub_annotations"   -> JsArray(mdp.calls.filter((calledAt) => {
                        val (callee, callSite) = calledAt
-                       val method = if(callee.methodDef != null) { 
-                         callee.methodDef.method 
+                       val fullCalleeName = if(callee.methodDef != null) { 
+                         callee.methodDef.method.fullyQualifiedName
                        } else { 
-                         callee.method
+                         callee.method.fullyQualifiedName
                        }
-                       val key = method.fullyQualifiedName;
-                       val result = (sinks.isDefinedAt(key) ||
-			                         sources.isDefinedAt(key) ||
-			                         otherMethods.isDefinedAt(key))
-                       //println("[" + result + "] " + method.className + "." + method.name)
-                       result
+                       (sinks.isDefinedAt(fullCalleeName) ||
+                        sources.isDefinedAt(fullCalleeName) ||
+                        otherMethods.isDefinedAt(fullCalleeName))
                     }).map(((calledAt) => {
                        val (callee, callSite) = calledAt
                        val method = if(callee.methodDef != null) callee.methodDef.method else callee.method 
                        val fullNm = method.fullyQualifiedName
-                       val calleeCost = if(costs.isDefinedAt(fullNm)) costs(fullNm) else 0
+                       val calleeCost = if(costs.isDefinedAt(fullNm)) costs(fullNm) else MethodConfig.DEFAULT_COST
                        val category = if(sinks.isDefinedAt(fullNm)) 
 				                         sinks(fullNm).category.name.toString();
 				                      else if(sources.isDefinedAt(fullNm)) 
@@ -441,19 +467,13 @@ object Analyzer extends App {
 				                        otherMethods(fullNm).category.name.toString()
 				                      else ""
 			                                        
-                       if(callSite != null) {                         
-							JsObject("start_line"  -> JsNumber(callSite.line),
-									 "end_line"    -> JsNumber(callSite.line),
-									 "start_col"   -> JsNumber(callSite.position),
-									 "method"      -> JsString(method.name),
-									 "class_name"  -> JsString(method.classType.toS),
-									 "risk_score"  -> JsNumber(calleeCost), 
-									 "description" -> JsString(category))
-                       } else {
-                           JsObject("method"      -> JsString(method.name),
-									"class_name"  -> JsString(method.classType.toS),
-									"description" -> JsString(category))
-                       }
+                       JsObject("start_line"  -> JsNumber(callSite.line),
+								"end_line"    -> JsNumber(callSite.line),
+								"start_col"   -> JsNumber(callSite.position),
+								"method"      -> JsString(method.name),
+								"class_name"  -> JsString(method.classType.toS),
+								"risk_score"  -> JsNumber(calleeCost), 
+								"description" -> JsString(category))
                     })).toList))
       }
     }).toList))
@@ -461,7 +481,7 @@ object Analyzer extends App {
    
   }
   wrapOutput {
-    /* setting this aside in favor of the cost-sourted analysis */
+    /* setting this aside in favor of the cost-sorted analysis */
     // println("Methods that call sources (non-exhaustive): ")
     // printMethodsAndSources(sourcesAndSinks.sources)
     // println
@@ -471,11 +491,7 @@ object Analyzer extends App {
     // println("Methods that call other interesting methods (non-exhaustive): ")
     // printMethodsAndSources(sourcesAndSinks.other)
     // println
-    println("Methods that call sources or sinks (higher numbers indicate more hits): ")
-    printMethodsWithCostAndSources(sourcesAndSinks.methodCosts)
-    sourcesAndSinks.sinks.toList.foreach((snk) => {
-       println(snk.name)
-    })
-    println
+    printCallGraph(sourcesAndSinks.methodCosts)
+    //printAnnotations(sourcesAndSinks.methodCosts)
   }
 }

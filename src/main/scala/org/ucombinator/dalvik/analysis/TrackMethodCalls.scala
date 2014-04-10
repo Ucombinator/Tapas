@@ -23,9 +23,6 @@ import collection.SortedSet
 class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
         simpleCallGraph: SimpleMethodCallGraph,
         cs: Set[Symbol], costs: Map[Symbol, Int]) {
-
-  // the default cost of an unmapped category cost
-  private def DEFAULT_COST = 5;
   
   // TODO: to finish this we need to:
   // a) have a version of this that will take a set of categories
@@ -73,7 +70,9 @@ class SourceSinkMethodCallAnalyzer(ssc: SourceSinkConfig,
     }
   }
 
-  private def getCost(s: Symbol): Int = if (costs isDefinedAt s) costs(s) else DEFAULT_COST
+  private def getCost(s: Symbol): Int = { 
+    if (costs isDefinedAt s) costs(s) else MethodConfig.DEFAULT_COST
+  }
 
   private def buildCostsSet(m: Map[String, ClassConfig],
                             classMap: Map[String, ClassDefProxy]): SortedSet[(Int,MethodDefProxy)] = {
