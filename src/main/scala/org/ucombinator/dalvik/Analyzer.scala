@@ -40,6 +40,7 @@ object Analyzer extends App {
   var apkFile: String = null
   var dump = false
   var outputFile: String = null
+  var outputDirectory: String = ""
   var databaseFile: String = null
   var configFile: String = "config/sourceSink.xml" // set our default file location
   var className: String = null
@@ -92,6 +93,7 @@ object Analyzer extends App {
       case ("-S"  | "--specify-cost-file") :: fn :: rest => readCostSpecification(fn) ; parseOptions(rest)
       case fn :: rest => {
         if (apkFile == null) {
+          //println(fn)
           val f = new File(fn)
 
           if (f.exists) {
@@ -116,10 +118,15 @@ object Analyzer extends App {
           if (fn(0) == '-') {
             reportError("Unrecognized option " + fn)
           } else {
-            reportError("APK file is already set to " + apkFile +
-                        " and we can only process on file at a time now, so " +
-                        fn + " cannot also be processed")
-          }
+              val outDirectory = new File(fn);
+              // if the directory does not exist, create it
+              if (!outDirectory.exists())
+              {
+                System.out.println("creating directory: " + fn);
+                outDirectory.mkdir();
+              }
+              outputDirectory = if(fn.endsWith("/")) fn else fn + "/";
+          } 
         }
       }
       case Nil => Unit
@@ -510,8 +517,9 @@ object Analyzer extends App {
   val apkName = if (apkFile != null) {
       apkFile.split('/').last.replace(".apk", "").toLowerCase()
   }
-  FileUtils.writeToFile(apkName + "_callgraph.json", 
+  
+  FileUtils.writeToFile(outputDirectory + apkName + "_tapas_callgraph.json", 
       renderCallGraph(sourcesAndSinks.methodCosts))
-  FileUtils.writeToFile(apkName + "_risk.json", 
+  FileUtils.writeToFile(outputDirectory + apkName + "_tapas_risk.json", 
       renderAnnotations(sourcesAndSinks.methodCosts))
 }
