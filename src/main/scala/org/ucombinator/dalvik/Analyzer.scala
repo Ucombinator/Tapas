@@ -13,6 +13,7 @@ import annotation.tailrec
 object Analyzer extends App {
   var apkFile: String = null
   var dump = false
+  var infoflow = false
   var outputFile: String = null
   var databaseFile: String = null
   var configFile: String = "config/sourceSink.xml" // set our default file location
@@ -28,6 +29,7 @@ object Analyzer extends App {
     println("  -h | --help              :: print this message")
     println("  -d | --dump              :: dump out the class definitions")
     println("  -o | --output-file       :: set the file for dump")
+    println("  -i | --infoflow          :: print sources and sinks")
     println("  -c | --class-name        :: indicate the class name to analyze")
     println("  -m | --method-name       :: indicate the method name to analyze")
     println("  -f | --config            :: set the configuration file")
@@ -52,6 +54,7 @@ object Analyzer extends App {
     args match {
       case ("-h"  | "--help") :: rest => displayHelpMessage
       case ("-d"  | "--dump") :: rest => dump = true ; parseOptions(rest)
+      case ("-i"  | "--infoflow") :: rest => infoflow = true ; parseOptions(rest)
       case ("-o"  | "--output-file") :: fn :: rest => outputFile = fn ; parseOptions(rest)
       case ("-db" | "--database") :: fn :: rest => databaseFile = fn ; parseOptions(rest)
       case ("-c"  | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
@@ -256,6 +259,9 @@ object Analyzer extends App {
     }
   }
 
+  private def dumpSourceSinks(classDefs: Array[ClassDef]): Unit = {
+    // TODO
+  }
   private def dumpClassDefs(classDefs: Array[ClassDef]): Unit = {
     for (cd <- classDefs) {
       print("class: " + cd.toS)
@@ -299,6 +305,7 @@ object Analyzer extends App {
   val classDefs = apkReader.readFile
 
   if (dump) wrapOutput { dumpClassDefs(classDefs) }
+  if (infoflow) wrapOutput { dumpSourceSinks(classDefs) }
 
   val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
 
