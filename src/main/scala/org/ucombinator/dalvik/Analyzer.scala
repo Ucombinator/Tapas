@@ -259,8 +259,49 @@ object Analyzer extends App {
     }
   }
 
+  private def getSS(filename: String): Set[String] = {
+    Source.fromFile(filename).getLines.foldLeft(Set.empty[String])({
+      (strs: Set[String], line: String) =>
+        val bits = line split " +"
+        val m = bits(0)
+        strs + m
+    })
+  }
   private def dumpSourceSinks(classDefs: Array[ClassDef]): Unit = {
-    // TODO
+    val sources = getSS("config/sources.txt")
+    val sinks = getSS("config/sinks.txt")
+    def check(m: Method, idx: Int, md: MethodDef, cd: ClassDef): Unit = {
+      if (sources contains m.fullyQualifiedName) {
+        println("source:\t" + m.fullyQualifiedName + " at line " + idx +
+            " of " + md.method.fullyQualifiedName + " in " + cd.toS)
+      }
+      if (sinks contains m.fullyQualifiedName) {
+        println("sink:\t" + m.fullyQualifiedName + " at line " + idx +
+            " of " + md.method.fullyQualifiedName + " in " + cd.toS)
+      }
+    }
+    for {
+      cd <- classDefs
+      md <- cd.combine(cd.virtualMethods, cd.directMethods)
+    } {
+      if (md.code != null) {
+        for (idx <- 0 until md.code.insns.length) {
+          md.code.insns(idx) match {
+            case InvokeVirtual(_, m) => check(m, idx, md, cd)
+            case InvokeStatic(_, m) => check(m, idx, md, cd)
+            case InvokeInterface(_, m) => check(m, idx, md, cd)
+            case InvokeDirect(_, m) => check(m, idx, md, cd)
+            case InvokeSuper(_, m) => check(m, idx, md, cd)
+            case InvokeVirtualRange(_, _, m) => check(m, idx, md, cd)
+            case InvokeStaticRange(_, _, m) => check(m, idx, md, cd)
+            case InvokeInterfaceRange(_, _, m) => check(m, idx, md, cd)
+            case InvokeDirectRange(_, _, m) => check(m, idx, md, cd)
+            case InvokeSuperRange(_, _, m) => check(m, idx, md, cd)
+            case _ => {}
+          }
+        }
+      }
+    }
   }
   private def dumpClassDefs(classDefs: Array[ClassDef]): Unit = {
     for (cd <- classDefs) {
