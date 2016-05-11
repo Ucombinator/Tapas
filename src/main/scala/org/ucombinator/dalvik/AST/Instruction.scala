@@ -91,7 +91,8 @@ abstract class Instruction {
     val params = getParameters
     val fields = params.take(params.length - 1)
     val last = params.last
-    instrName + " " + fields.map(convertParameter).toString + ", " + last._3
+    val fieldsStr = fields.map(convertParameter).mkString(", ")
+    instrName + " " + fieldsStr + ", " + last._3
   }
 
   def toS(): String = {
@@ -145,6 +146,7 @@ case class MoveObject16(a:Int, b:Int) extends Instruction
 
 // return a void value
 case object ReturnVoid extends Instruction {
+  override def toS = getInstructionName
   override def getInstructionName = "return-void"
 }
 
