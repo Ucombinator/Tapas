@@ -13,6 +13,8 @@ import annotation.tailrec
 object Analyzer extends App {
   var apkFile: String = null
   var dump = false
+  var justDump = false
+  var dex = false
   var outputFile: String = null
   var databaseFile: String = null
   var configFile: String = "config/sourceSink.xml" // set our default file location
@@ -27,6 +29,7 @@ object Analyzer extends App {
     println("usage: analyzer [<options>] APK-file")
     println("  -h | --help              :: print this message")
     println("  -d | --dump              :: dump out the class definitions")
+    println("  -D | --just-dump         :: dump and don't do any other analyses")
     println("  -o | --output-file       :: set the file for dump")
     println("  -c | --class-name        :: indicate the class name to analyze")
     println("  -m | --method-name       :: indicate the method name to analyze")
@@ -38,6 +41,7 @@ object Analyzer extends App {
     println("  -A | --add-method-file   :: specify a filename of additional methods w/categories")
     println("  -s | --specify-cost      :: specifies cost by category")
     println("  -S | --specify-cost-file :: specify a filename of costs by category")
+    println("  -x | --dex-input         :: specify a dex file instead of an APK file")
     sys.exit
   }
 
@@ -52,6 +56,7 @@ object Analyzer extends App {
     args match {
       case ("-h"  | "--help") :: rest => displayHelpMessage
       case ("-d"  | "--dump") :: rest => dump = true ; parseOptions(rest)
+      case ("-D"  | "--just-dump") :: rest => dump = true ; justDump = true ; parseOptions(rest)
       case ("-o"  | "--output-file") :: fn :: rest => outputFile = fn ; parseOptions(rest)
       case ("-db" | "--database") :: fn :: rest => databaseFile = fn ; parseOptions(rest)
       case ("-c"  | "--class-name") :: cn :: rest => className = cn ; parseOptions(rest)
@@ -64,6 +69,7 @@ object Analyzer extends App {
       case ("-A"  | "--add-method-file") :: fn :: rest => readAdditionalMethods(fn) ; parseOptions(rest)
       case ("-s"  | "--specify-cost") :: rest => val rest2 = parseCostSpecification(rest) ; parseOptions(rest2)
       case ("-S"  | "--specify-cost-file") :: fn :: rest => readCostSpecification(fn) ; parseOptions(rest)
+      case ("-x"  | "--specify-dex-file") :: rest => dex = true ; parseOptions(rest)
       case fn :: rest => {
         if (apkFile == null) {
           val f = new File(fn)
@@ -295,71 +301,71 @@ object Analyzer extends App {
     }
   }
 
-  val apkReader = new ApkReader(apkFile)
-  val classDefs = apkReader.readFile
+  val classDefs = if (dex) {
+    val dexReader = new DexReader(apkFile)
+    dexReader.readFile
+  } else {
+    val apkReader = new ApkReader(apkFile)
+    apkReader.readFile
+  }
 
-  if (dump) wrapOutput { dumpClassDefs(classDefs) }
+  if (dump) wrapOutput {
+    dumpClassDefs(classDefs)
+  }
 
-  val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
-
-  if (className != null && methodName != null) {
-    wrapOutput {
-      println(
-        (if (simpleCallGraph.classMap isDefinedAt className) {
-           val cdp = simpleCallGraph.classMap(className)
-           if (cdp.methodMap isDefinedAt methodName) {
-             (cdp.methodMap(methodName).calls map {
-                mdp => {
-                  val m = if (mdp.method == null)
-                            mdp.methodDef.method
-                          else
-                            mdp.method
-                  m.classType.toS + "." + m.name
-                }
-              }).mkString(", ")
+  if (!justDump) {
+    val simpleCallGraph = new SimpleMethodCallGraph(classDefs)
+  
+    if (className != null && methodName != null) {
+      wrapOutput {
+        println(
+          (if (simpleCallGraph.classMap isDefinedAt className) {
+             val cdp = simpleCallGraph.classMap(className)
+             if (cdp.methodMap isDefinedAt methodName) {
+               (cdp.methodMap(methodName).calls map {
+                  mdp => {
+                    val m = if (mdp.method == null)
+                              mdp.methodDef.method
+                            else
+                              mdp.method
+                    m.classType.toS + "." + m.name
+                  }
+                }).mkString(", ")
+             } else {
+               "No method " + methodName + " on class " + className
+             }
            } else {
-             "No method " + methodName + " on class " + className
-           }
-         } else {
-           "No class " + className
-         }))
+             "No class " + className
+           }))
+      }
     }
-  }
-
-  // Look, a real, if (very, very) simple, analyzsis
-  val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config,
-                          simpleCallGraph, limitToCategories, costSpecification)
-  def printMethodsAndSources(mds: Set[MethodDef]) {
-    mds foreach {
-      (md) => println("  " + md.method.classType.toS + "." + md.name +
-                (md.sourceLocation match {
-                   case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
-                   case None => ""
-                   }))
+  
+    // Look, a real, if (very, very) simple, analyzsis
+    val sourcesAndSinks = new SourceSinkMethodCallAnalyzer(config,
+                            simpleCallGraph, limitToCategories, costSpecification)
+    def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDef)]) {
+      mds foreach {
+        (a) => println("  " + a._1 + "\t" + a._2.method.classType.toS + "." + a._2.name +
+                 (a._2.sourceLocation match {
+                    case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
+                    case None => ""
+                    }))
+      }
     }
-  }
-  def printMethodsWithCostAndSources(mds: SortedSet[(Int,MethodDef)]) {
-    mds foreach {
-      (a) => println("  " + a._1 + "\t" + a._2.method.classType.toS + "." + a._2.name +
-               (a._2.sourceLocation match {
-                  case Some((fn,line,pos)) => " (" + fn + ":" + line + ") pos: " + pos
-                  case None => ""
-                  }))
+    wrapOutput {
+      /* setting this aside in favor of the cost-sourted analysis */
+      // println("Methods that call sources (non-exhaustive): ")
+      // printMethodsAndSources(sourcesAndSinks.sources)
+      // println
+      // println("Methods that call sinks (non-exhaustive): ")
+      // printMethodsAndSources(sourcesAndSinks.sinks)
+      // println
+      // println("Methods that call other interesting methods (non-exhaustive): ")
+      // printMethodsAndSources(sourcesAndSinks.other)
+      // println
+      println("Methods that call sources or sinks (higher numbers indicate more hits): ")
+      printMethodsWithCostAndSources(sourcesAndSinks.methodCosts)
+      println
     }
-  }
-  wrapOutput {
-    /* setting this aside in favor of the cost-sourted analysis */
-    // println("Methods that call sources (non-exhaustive): ")
-    // printMethodsAndSources(sourcesAndSinks.sources)
-    // println
-    // println("Methods that call sinks (non-exhaustive): ")
-    // printMethodsAndSources(sourcesAndSinks.sinks)
-    // println
-    // println("Methods that call other interesting methods (non-exhaustive): ")
-    // printMethodsAndSources(sourcesAndSinks.other)
-    // println
-    println("Methods that call sources or sinks (higher numbers indicate more hits): ")
-    printMethodsWithCostAndSources(sourcesAndSinks.methodCosts)
-    println
   }
 }
